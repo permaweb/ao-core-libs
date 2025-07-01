@@ -12,6 +12,6 @@
 	"author": "",
 	"license": "ISC",
 	"dependencies": {
-		"@permaweb/ao-core-sdk": "file:.."
+		"@permaweb/ao-core-libs": "file:.."
 	}
 }

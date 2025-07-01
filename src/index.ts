@@ -1,18 +1,16 @@
 import { request } from 'services/core.ts';
 
 import { createSigner } from 'helpers/signer.ts';
-import { DependenciesType, SignerType } from 'helpers/types.ts';
+import { DependenciesType } from 'helpers/types.ts';
+
+const DEFAULT_URL = 'https://forward.computer';
 
 function init(deps: DependenciesType) {
 	const validationError = getValidationError(deps);
 	if (validationError) throw new Error(validationError);
-
-	/* Create the signer if only a wallet is passed */
-	if (!deps.signer && deps.jwk) {
-		deps = { ...deps, signer: createSigner(deps.jwk) };
-	} else {
-		throw new Error('No Signer or JWK provided');
-	}
+	
+	if (!deps.signer && deps.jwk) deps = { ...deps, signer: createSigner(deps.jwk) };
+	if (!deps.url) deps = { ...deps, url: DEFAULT_URL };
 
 	return {
 		request: request(deps),

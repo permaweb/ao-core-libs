@@ -1,4 +1,4 @@
-# @permaweb/ao-core-sdk
+# @permaweb/ao-core-libs
 
 This SDK provides a JavaScript interface for communicating with AO-Core.
 
@@ -14,19 +14,19 @@ For a full breakdown of AO-Core, please see the [documentation](https://hyperbea
 ## Installation
 
 ```bash
-npm install @permaweb/ao-core-sdk
+npm install @permaweb/ao-core-libs
 ```
 
 or
 
 ```bash
-yarn add @permaweb/ao-core-sdk
+yarn add @permaweb/ao-core-libs
 ```
 
 ## Initialization
 
 ```typescript
-import AOCore from '@permaweb/ao-core-sdk';
+import AOCore from '@permaweb/ao-core-libs';
 
 // NodeJS Usage
 const jwk = JSON.parse(readFileSync(process.env.PATH_TO_WALLET, 'utf-8'));
@@ -64,7 +64,7 @@ const response = await aoCore.request({
 
 ## Testing
 
-To run the `@permaweb/ao-core-sdk` tests:
+To run the `@permaweb/ao-core-libs` tests:
 
 - `cd tests`
 - `npm test`

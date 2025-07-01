@@ -9,15 +9,8 @@ export type DependenciesType = {
 
 /* Arguments accepted by the request function */
 export type RequestType = {
-	url?: string;
-	method: RequestMethodType;
-	format: RequestFormatType;
-	process?: string;
-	device?: string;
 	path: string;
-	fields?: object;
-	data?: any;
-};
+} & any;
 
 /* HTTP Method used in Request */
 export type RequestMethodType = 'GET' | 'POST';
@@ -30,9 +23,10 @@ export enum RequestFormatType {
 
 /* Minimal Request shape for HTTP signing */
 export interface HttpRequest {
-	url: string;
-	method: string;
+	url?: string;
+	method?: string;
 	headers: Record<string, string>;
+	body: any;
 }
 
 /* What we hand to the signer: the request plus the list of header-fields to sign */

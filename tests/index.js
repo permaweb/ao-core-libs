@@ -1,4 +1,4 @@
-import AOCore from '@permaweb/ao-core-sdk';
+import AOCore from '@permaweb/ao-core-libs';
 import fs from 'fs';
 
 function expect(actual) {
@@ -89,16 +89,9 @@ function logError(message) {
 	const aoCore = AOCore.init({ jwk });
 
 	const postAns104 = await aoCore.request({
+		path: 'JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
 		method: 'POST',
-		format: 'ANS-104',
-		process: 'JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk',
-		path: 'compute/at-slot',
-		fields: {
-			target: 'uf_FqRvLqjnFMc8ZzGkF4qWKuNmUIQcYP0tPlCGORQk',
-			anchor: '',
-			test: '1234',
-			data: '1234'
-		}
+		signingFormat: 'ANS-104'
 	});
 
 	expect(postAns104).toBeDefined();
@@ -111,15 +104,8 @@ function logError(message) {
 
 	const postHttpSig = await aoCore.request({
 		method: 'POST',
-		format: 'HTTP-SIG',
-		process: 'JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk',
-		path: 'compute/at-slot',
-		fields: {
-			target: 'uf_FqRvLqjnFMc8ZzGkF4qWKuNmUIQcYP0tPlCGORQk',
-			anchor: '',
-			test: '1234',
-			data: '1234'
-		}
+		signingFormat: 'HTTP-SIG',
+		path: 'JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
 	});
 
 	expect(postHttpSig).toBeDefined();

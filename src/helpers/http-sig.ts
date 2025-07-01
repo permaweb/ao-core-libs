@@ -11,11 +11,11 @@ import {
 	SigBaseOutput,
 	SignerType,
 } from './types.ts';
-import { decodeBase64UrlToBytes, encodeBase64Url, hasNewline, isBytes, isPojo, sha256, toView } from './utils.ts';
+import { debugLog, decodeBase64UrlToBytes, encodeBase64Url, hasNewline, isBytes, isPojo, sha256, toView } from './utils.ts';
 
 const MAX_HEADER_LENGTH = 4096;
 
-/** Encode a value into [type, encoded] tuple */
+/* Encode a value into [type, encoded] tuple */
 function hbEncodeValue(value: unknown): [string | undefined, string | Uint8Array | undefined] {
 	if (isBytes(value)) {
 		const bytes = new Uint8Array(
@@ -61,7 +61,7 @@ export function hbEncodeLift(obj: POJO, parent: string = '', top: POJO = {}): PO
 			if (val == null) return [flat, types];
 			let value = val;
 			if (Array.isArray(value) && value.some(isPojo)) {
-				// convert array of POJOs to object by index
+				// Convert array of POJOs to object by index
 				value = value.reduce((acc, v, i) => ({ ...acc, [i]: v }), {} as POJO);
 			}
 			if (isPojo(value)) {
@@ -85,7 +85,7 @@ export function hbEncodeLift(obj: POJO, parent: string = '', top: POJO = {}): PO
 
 	if (Object.keys(flatObj).length === 0 && !parent) return top;
 
-	// attach ao-types header
+	// Attach ao-types header
 	if (Object.keys(typesObj).length > 0) {
 		const aoTypes = Object.entries(typesObj)
 			.map(([k, v]) => `${k.toLowerCase()}=${v}`)
@@ -128,14 +128,14 @@ export function httpSigName(address: string) {
  * Wrap any low‐level SignerType into an HTTP‐signature‐style signer.
  */
 export function toHttpSigner(signer: SignerType) {
-	// always sign these params, sorted
+	// Always sign these params, sorted
 	const params = ['alg', 'keyid'] as const;
 
 	return async function ({ request, fields }: HttpSignerArgs): Promise<HttpRequest> {
 		let unsignedBytes: Uint8Array;
 		let createCalled = false;
 
-		// we’ll stash these to build headers after signing
+		// We’ll stash these to build headers after signing
 		const httpSig: {
 			signatureInput?: string;
 			signatureBase?: string;
@@ -158,7 +158,7 @@ export function toHttpSigner(signer: SignerType) {
 			} as any);
 
 			// Build the (field → value) list
-			const signatureBaseList = httpbis.createSignatureBase({ fields }, request);
+			const signatureBaseList = httpbis.createSignatureBase({ fields }, request as any);
 
 			// Serialize “@signature-params” and append it
 			const signatureInput = serializeList([[signatureBaseList.map(([item]) => parseItem(item)), signingParameters]]);
@@ -210,6 +210,9 @@ export function toHttpSigner(signer: SignerType) {
 export async function toHBRequest(obj: POJO = {}): Promise<{ headers: Headers; body?: Blob } | undefined> {
 	if (Object.keys(obj).length === 0) return;
 	const flattened = hbEncodeLift(obj);
+
+	debugLog('info', 'Flattened HB Object', flattened);
+
 	const headerKeys: string[] = [];
 	const bodyKeys: string[] = [];
 
@@ -247,7 +250,7 @@ export async function toHBRequest(obj: POJO = {}): Promise<{ headers: Headers; b
 			headers.delete(bodyKeys[0]);
 			body = single;
 		} else {
-			// multipart
+			// Multipart
 			const partsBuffers = await Promise.all(bodyKeys.map((k) => (flattened[k] as Blob).arrayBuffer()));
 			const base = new Blob(partsBuffers.flatMap((buf, i) => (i < partsBuffers.length - 1 ? [buf, '\r\n'] : [buf])));
 			const hash = await sha256(await base.arrayBuffer());
@@ -267,6 +270,8 @@ export async function toHBRequest(obj: POJO = {}): Promise<{ headers: Headers; b
 		const cdB64 = encodeBase64Url(cdHash);
 		headers.append('Content-Digest', `sha-256=:${cdB64}:`);
 	}
+
+	debugLog('info', 'To HB Request', { headers, body });
 
 	return { headers, body };
 }
