@@ -1,0 +1,17 @@
+{
+	"name": "node",
+	"type": "module",
+	"version": "1.0.0",
+	"description": "",
+	"main": "index.js",
+	"scripts": {
+		"pretest": "npm --prefix .. install && npm --prefix .. run build",
+		"test": "DEBUG=* node index.js"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"dependencies": {
+		"@permaweb/ao-core-sdk": "file:.."
+	}
+}
