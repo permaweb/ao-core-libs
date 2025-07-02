@@ -268,25 +268,42 @@ export function validateBase64Url(input: string, fieldName: string): void {
  * Rate limiting for cryptographic operations to prevent abuse
  */
 class CryptoRateLimiter {
-  private operations: Map<string, number[]> = new Map();
+  private operations: Map<string, { count: number; windowStart: number }> = new Map();
   private readonly windowMs: number;
   private readonly maxOperations: number;
+  private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor(windowMs: number = 60000, maxOperations: number = 100) {
     this.windowMs = windowMs;
     this.maxOperations = maxOperations;
+    
+    // Periodic cleanup to prevent memory leaks
+    this.cleanupInterval = setInterval(() => this.cleanup(), this.windowMs);
+  }
+
+  private cleanup(): void {
+    const now = Date.now();
+    for (const [identifier, data] of this.operations.entries()) {
+      if (now - data.windowStart >= this.windowMs) {
+        this.operations.delete(identifier);
+      }
+    }
   }
 
   checkLimit(identifier: string): void {
     const now = Date.now();
-    const operations = this.operations.get(identifier) || [];
+    const existing = this.operations.get(identifier);
     
-    // Remove old operations outside the window
-    const validOps = operations.filter(timestamp => now - timestamp < this.windowMs);
+    if (!existing || now - existing.windowStart >= this.windowMs) {
+      // New window or first operation
+      this.operations.set(identifier, { count: 1, windowStart: now });
+      return;
+    }
     
-    if (validOps.length >= this.maxOperations) {
+    // Within the same window
+    if (existing.count >= this.maxOperations) {
       throw new CryptographicError(
-        ErrorCode.CRYPTO_INVALID_SIGNATURE,
+        ErrorCode.CRYPTO_RATE_LIMIT_EXCEEDED,
         'Too many cryptographic operations',
         {
           identifier,
@@ -297,8 +314,14 @@ class CryptoRateLimiter {
       );
     }
 
-    validOps.push(now);
-    this.operations.set(identifier, validOps);
+    existing.count++;
+  }
+
+  destroy(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
   }
 }
 

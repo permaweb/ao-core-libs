@@ -65,33 +65,44 @@ function hbEncodeValue(value: unknown): [string | undefined, string | Uint8Array
  * Lift and flatten nested fields for multipart encoding
  */
 export function hbEncodeLift(obj: POJO, parent: string = '', top: POJO = {}): POJO {
-	const [flatObj, typesObj] = Object.entries({ ...obj }).reduce(
-		([flat, types], [key, val]) => {
-			const flatKey = parent ? `${parent}/${key}`.toLowerCase() : key.toLowerCase();
-			if (val == null) return [flat, types];
-			let value = val;
-			if (Array.isArray(value) && value.some(isPojo)) {
-				// Convert array of POJOs to object by index
-				value = value.reduce((acc, v, i) => ({ ...acc, [i]: v }), {} as POJO);
+	const flatObj: POJO = {};
+	const typesObj: POJO = {};
+	
+	// Use for...in loop to avoid object spread and reduce overhead
+	for (const key in obj) {
+		if (!obj.hasOwnProperty(key)) continue;
+		
+		const val = obj[key];
+		const flatKey = parent ? `${parent}/${key}`.toLowerCase() : key.toLowerCase();
+		
+		if (val == null) continue;
+		
+		let value = val;
+		if (Array.isArray(value) && value.some(isPojo)) {
+			// Convert array of POJOs to object by index - optimized
+			const converted: POJO = {};
+			for (let i = 0; i < value.length; i++) {
+				converted[i] = value[i];
 			}
-			if (isPojo(value)) {
-				hbEncodeLift(value, flatKey, top);
-				return [flat, types];
+			value = converted;
+		}
+		
+		if (isPojo(value)) {
+			hbEncodeLift(value, flatKey, top);
+			continue;
+		}
+		
+		const [type, encoded] = hbEncodeValue(value);
+		if (encoded !== undefined) {
+			const size = typeof encoded === 'string' ? Buffer.byteLength(encoded) : (encoded as Uint8Array).byteLength;
+			if (size > MAX_HEADER_LENGTH) {
+				top[flatKey] = encoded;
+			} else {
+				flatObj[key] = encoded;
 			}
-			const [type, encoded] = hbEncodeValue(value);
-			if (encoded !== undefined) {
-				const size = typeof encoded === 'string' ? Buffer.byteLength(encoded) : (encoded as Uint8Array).byteLength;
-				if (size > MAX_HEADER_LENGTH) {
-					top[flatKey] = encoded;
-				} else {
-					flat[key] = encoded;
-				}
-			}
-			if (type) types[key] = type;
-			return [flat, types];
-		},
-		[{} as POJO, {} as POJO],
-	);
+		}
+		if (type) typesObj[key] = type;
+	}
 
 	if (Object.keys(flatObj).length === 0 && !parent) return top;
 

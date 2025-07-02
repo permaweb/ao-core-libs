@@ -55,8 +55,20 @@ export function encodeBase64Url(input: Uint8Array | ArrayBuffer): string {
 	// Get a Uint8Array
 	const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
 
-	// Convert to standard base64
-	let b64 = btoa(String.fromCharCode(...bytes));
+	// Convert to standard base64 - handle large arrays in chunks to avoid stack overflow
+	let b64: string;
+	if (bytes.length > 32768) {
+		// For large arrays, process in chunks to avoid call stack overflow
+		const chunks: string[] = [];
+		for (let i = 0; i < bytes.length; i += 32768) {
+			const chunk = bytes.slice(i, i + 32768);
+			chunks.push(String.fromCharCode(...chunk));
+		}
+		b64 = btoa(chunks.join(''));
+	} else {
+		// For smaller arrays, use direct conversion
+		b64 = btoa(String.fromCharCode(...bytes));
+	}
 
 	// Make it 'URL safe'
 	return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -83,12 +95,8 @@ export function decodeBase64UrlToBytes(b64url: string): Uint8Array {
 							}
 						);
 					})();
-	// 4. Map to bytes
-	const bytes = new Uint8Array(bin.length);
-	for (let i = 0; i < bin.length; i++) {
-		bytes[i] = bin.charCodeAt(i);
-	}
-	return bytes;
+	// 4. Map to bytes - optimized conversion
+	return Uint8Array.from(bin, c => c.charCodeAt(0));
 }
 
 /**
@@ -149,7 +157,64 @@ export async function hasNewline(value: string | Blob | ArrayBufferView | ArrayB
 	return false;
 }
 
-/** SHA-256 digest */
+/** Simple LRU cache for hash results */
+class HashCache {
+	private cache = new Map<string, ArrayBuffer>();
+	private maxSize = 100; // Limit cache size
+	
+	private getKey(data: ArrayBuffer | Uint8Array): string {
+		// Create a simple key from the first and last few bytes + length
+		const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
+		if (bytes.length <= 16) {
+			return Array.from(bytes).join(',');
+		}
+		// For larger arrays, use first 8 + last 8 bytes + length as key
+		const key = Array.from(bytes.slice(0, 8)).join(',') + '|' + 
+					Array.from(bytes.slice(-8)).join(',') + '|' + bytes.length;
+		return key;
+	}
+	
+	get(data: ArrayBuffer | Uint8Array): ArrayBuffer | undefined {
+		const key = this.getKey(data);
+		const result = this.cache.get(key);
+		if (result) {
+			// Move to end (most recently used)
+			this.cache.delete(key);
+			this.cache.set(key, result);
+		}
+		return result;
+	}
+	
+	set(data: ArrayBuffer | Uint8Array, hash: ArrayBuffer): void {
+		const key = this.getKey(data);
+		
+		// Remove oldest entry if cache is full
+		if (this.cache.size >= this.maxSize) {
+			const firstKey = this.cache.keys().next().value;
+			this.cache.delete(firstKey);
+		}
+		
+		// Store the hash result
+		this.cache.set(key, hash.slice()); // Clone the buffer
+	}
+}
+
+// Global hash cache instance
+const hashCache = new HashCache();
+
+/** SHA-256 digest with caching */
 export async function sha256(data: ArrayBuffer): Promise<ArrayBuffer> {
-	return crypto.subtle.digest('SHA-256', data);
+	// Check cache first
+	const cached = hashCache.get(data);
+	if (cached) {
+		return cached.slice(); // Return a copy
+	}
+	
+	// Compute hash
+	const hash = await crypto.subtle.digest('SHA-256', data);
+	
+	// Cache the result
+	hashCache.set(data, hash);
+	
+	return hash;
 }

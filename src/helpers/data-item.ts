@@ -1,7 +1,7 @@
 import { createData, DataItem, SIG_CONFIG } from '@dha-team/arbundles';
 
 import { ANS104RequestResult, CreateInput, DataItemFields, DataItemOptions, DataItemSigner, RequestFormatType, SignedDataItemResult, SignerType } from './types';
-import { debugLog, encodeBase64Url, toView } from './utils';
+import { debugLog, encodeBase64Url, toView, sha256 } from './utils';
 import { CryptographicError, ValidationError, ErrorCode } from './errors';
 import { validateSignatureData, validateHashInput, constantTimeEquals } from './security';
 
@@ -41,7 +41,7 @@ export async function getRawAndId(dataItemBytes: Uint8Array) {
 	 */
 	const rawSignature = dataItem.rawSignature;
 	validateHashInput(rawSignature, 'signature for ID calculation');
-	const rawId = await crypto.subtle.digest('SHA-256', rawSignature);
+	const rawId = await sha256(rawSignature.buffer);
 
 	return {
 		id: encodeBase64Url(rawId),
@@ -143,7 +143,7 @@ export function toDataItemSigner(signer: SignerType) {
 		// Compute the DataItem ID = base64url( SHA-256(rawSig) )
 		const rawSigBytes = Buffer.isBuffer(rawSig) ? new Uint8Array(rawSig) : rawSig;
 		validateHashInput(rawSigBytes, 'signature data for ID generation');
-		const hashBuffer = await crypto.subtle.digest('SHA-256', rawSigBytes);
+		const hashBuffer = await sha256(rawSigBytes.buffer);
 		const id = encodeBase64Url(hashBuffer);
 
 		return { id, raw: signedBytes };
@@ -167,12 +167,16 @@ export function toANS104Request(fields: DataItemFields): { headers: Record<strin
 
 	const exclude = new Set(excludeList);
 
-	const dynamicTags = Object.entries(rest)
-		.filter(([key]) => !exclude.has(key.toLowerCase()))
-		.map(([name, value]) => ({
-			name,
-			value: String(value),
-		}));
+	// Combine filter and map operations into single loop for better performance
+	const dynamicTags: Array<{ name: string; value: string }> = [];
+	for (const [name, value] of Object.entries(rest)) {
+		if (!exclude.has(name.toLowerCase())) {
+			dynamicTags.push({
+				name,
+				value: String(value),
+			});
+		}
+	}
 
 	const tags = [
 		...dynamicTags,
