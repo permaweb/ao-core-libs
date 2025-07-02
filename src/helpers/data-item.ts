@@ -1,11 +1,23 @@
 import { createData, DataItem, SIG_CONFIG } from '@dha-team/arbundles';
 
-import { CreateInput, SigningFormatType } from './types.ts';
-import { debugLog, encodeBase64Url, toView } from './utils.ts';
+import { CryptographicError, ErrorCode, ValidationError } from './errors.ts';
+import { validateHashInput, validateSignatureData } from './security.ts';
+import { CreateInput, DataItemFields, SignerType, SigningFormatType } from './types.ts';
+import { debugLog, encodeBase64Url, sha256, toView } from './utils.ts';
 
 export function createDataItemBytes(data: any, signer: any, opts: any) {
 	const signerMeta = (SIG_CONFIG as any)[signer.type];
-	if (!signerMeta) throw new Error(`Metadata for signature type ${signer.type} not found`);
+	if (!signerMeta) {
+		throw new CryptographicError(
+			ErrorCode.CRYPTO_SIGNATURE_METADATA_NOT_FOUND,
+			`No metadata found for signature type ${signer.type}`,
+			{
+				signerType: signer.type,
+				availableTypes: Object.keys(SIG_CONFIG),
+				suggestion: 'Verify signer type is supported by arbundles library',
+			},
+		);
+	}
 
 	signerMeta.signatureType = signer.type;
 	signerMeta.ownerLength = signerMeta.pubLength;
@@ -17,7 +29,10 @@ export function createDataItemBytes(data: any, signer: any, opts: any) {
 }
 
 export async function getRawAndId(dataItemBytes: Uint8Array) {
-	const dataItem = new DataItem(dataItemBytes as any);
+	// Validate input data
+	validateHashInput(dataItemBytes, 'data item bytes');
+
+	const dataItem = new DataItem(dataItemBytes);
 
 	/**
 	 * arbundles dataItem.id does not work in browser environments
@@ -25,7 +40,8 @@ export async function getRawAndId(dataItemBytes: Uint8Array) {
 	 * on node and browser
 	 */
 	const rawSignature = dataItem.rawSignature;
-	const rawId = await crypto.subtle.digest('SHA-256', rawSignature);
+	validateHashInput(rawSignature, 'signature for ID calculation');
+	const rawId = await sha256(rawSignature.buffer);
 
 	return {
 		id: encodeBase64Url(rawId),
@@ -34,17 +50,17 @@ export async function getRawAndId(dataItemBytes: Uint8Array) {
 }
 
 export function getSignatureData(dataItemBytes: Uint8Array) {
-	const dataItem = new DataItem(dataItemBytes as any);
+	const dataItem = new DataItem(dataItemBytes);
 	return dataItem.getSignatureData();
 }
 
 export function verify(dataItemBytes: Uint8Array) {
-	return DataItem.verify(dataItemBytes as any);
+	return DataItem.verify(dataItemBytes);
 }
 
-export function toDataItemSigner(signer: any) {
-	return async function ({ data, tags, target, anchor }: any) {
-		let unsignedBytes: any = null;
+export function toDataItemSigner(signer: SignerType) {
+	return async function ({ data, tags, target, anchor }: DataItemFields) {
+		let unsignedBytes: Uint8Array | null = null;
 		let createCalled = false;
 
 		// This function will be called by the signer to build
@@ -78,7 +94,9 @@ export function toDataItemSigner(signer: any) {
 
 		// Make sure create() actually ran
 		if (!createCalled) {
-			throw new Error('create() must be invoked to construct the data to sign');
+			throw new CryptographicError(ErrorCode.CRYPTO_CREATE_NOT_INVOKED, 'Signer did not invoke create() function', {
+				suggestion: 'Check signer implementation - create() must be called to generate signature data',
+			});
 		}
 
 		// If the signer already returned a full DataItem, just pass it through
@@ -88,30 +106,52 @@ export function toDataItemSigner(signer: any) {
 
 		// Otherwise, expect a signature blob
 		if (!res.signature) {
-			throw new Error('signer must return a `signature` property');
+			throw new CryptographicError(
+				ErrorCode.CRYPTO_MISSING_SIGNATURE,
+				'Signer result missing required signature property',
+				{
+					returned: Object.keys(res || {}),
+					suggestion: 'Signer must return an object with signature property',
+				},
+			);
 		}
 		const rawSig = toView(res.signature);
 
 		// Splice the raw signature into the unsigned bytes
-		const signedBytes = new Uint8Array(unsignedBytes);
-		signedBytes.set(rawSig as any, 2);
+		const signedBytes = new Uint8Array(unsignedBytes!);
+		signedBytes.set(Buffer.isBuffer(rawSig) ? new Uint8Array(rawSig) : rawSig, 2);
+
+		// Validate signature data before verification
+		validateSignatureData(rawSig, 'data item signature');
 
 		// Verify it before returning
 		const isValid = await verify(signedBytes);
 		if (!isValid) {
-			throw new Error('Data Item signature is not valid');
+			throw new CryptographicError(
+				ErrorCode.CRYPTO_INVALID_SIGNATURE,
+				'Generated data item signature failed validation',
+				{
+					suggestion: 'Check wallet private key and signing implementation',
+				},
+			);
 		}
 
 		// Compute the DataItem ID = base64url( SHA-256(rawSig) )
-		const hashBuffer = await crypto.subtle.digest('SHA-256', rawSig as any);
+		const rawSigBytes = Buffer.isBuffer(rawSig) ? new Uint8Array(rawSig) : rawSig;
+		validateHashInput(rawSigBytes, 'signature data for ID generation');
+		const hashBuffer = await sha256(rawSigBytes.buffer);
 		const id = encodeBase64Url(hashBuffer);
 
 		return { id, raw: signedBytes };
 	};
 }
 
-export function toANS104Request(fields: any) {
-	if (!fields) throw new Error('Expected Fields');
+export function toANS104Request(fields: DataItemFields): { headers: Record<string, string>; item: any } {
+	if (!fields) {
+		throw new ValidationError(ErrorCode.VALIDATION_MISSING_FIELDS, 'Fields object is required for ANS-104 request', {
+			suggestion: 'Provide an object with request fields (data, target, etc.)',
+		});
+	}
 
 	const { target = '', anchor = '', data = '', Type, Variant, ...rest } = fields;
 
@@ -119,12 +159,16 @@ export function toANS104Request(fields: any) {
 
 	const exclude = new Set(excludeList);
 
-	const dynamicTags = Object.entries(rest)
-		.filter(([key]) => !exclude.has(key.toLowerCase()))
-		.map(([name, value]) => ({
-			name,
-			value: String(value),
-		}));
+	// Combine filter and map operations into single loop for better performance
+	const dynamicTags: Array<{ name: string; value: string }> = [];
+	for (const [name, value] of Object.entries(rest)) {
+		if (!exclude.has(name.toLowerCase())) {
+			dynamicTags.push({
+				name,
+				value: String(value),
+			});
+		}
+	}
 
 	const tags = [
 		...dynamicTags,

@@ -6,7 +6,8 @@ try {
 	hasNodeBuffer = true;
 } catch {}
 
-import { DebugLogType, DependenciesType, POJO, RequestType } from './types.ts';
+import { EncodingError, ErrorCode } from './errors.ts';
+import { DebugLogType, POJO } from './types.ts';
 
 const raw = process.env.DEBUG ?? '';
 const enabled = new Set(raw.split(',').map((s) => s.trim()));
@@ -42,11 +43,11 @@ export function buildPath(args: { process?: string; device?: string; path: strin
 	return result;
 }
 
-export function joinURL(args: { url: any; path: any }) {
+export function joinURL(args: { url: string; path: string }) {
 	if (!args.path) return args.url;
 	if (args.path.startsWith('/')) return joinURL({ url: args.url, path: args.path.slice(1) });
-	args.url = new URL(args.url);
-	args.url.pathname += args.path;
+	(args.url as any) = new URL(args.url);
+	(args.url as any).pathname += args.path;
 	return args.url.toString();
 }
 
@@ -54,8 +55,20 @@ export function encodeBase64Url(input: Uint8Array | ArrayBuffer): string {
 	// Get a Uint8Array
 	const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
 
-	// Convert to standard base64
-	let b64 = btoa(String.fromCharCode(...bytes));
+	// Convert to standard base64 - handle large arrays in chunks to avoid stack overflow
+	let b64: string;
+	if (bytes.length > 32768) {
+		// For large arrays, process in chunks to avoid call stack overflow
+		const chunks: string[] = [];
+		for (let i = 0; i < bytes.length; i += 32768) {
+			const chunk = bytes.slice(i, i + 32768);
+			chunks.push(String.fromCharCode(...chunk));
+		}
+		b64 = btoa(chunks.join(''));
+	} else {
+		// For smaller arrays, use direct conversion
+		b64 = btoa(String.fromCharCode(...bytes));
+	}
 
 	// Make it 'URL safe'
 	return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -73,21 +86,24 @@ export function decodeBase64UrlToBytes(b64url: string): Uint8Array {
 			: hasNodeBuffer
 				? NodeBuffer.from(b64, 'base64').toString('binary')
 				: (() => {
-						throw new Error('No base64 decoder!');
+						throw new EncodingError(ErrorCode.ENCODING_NO_DECODER, 'No base64 decoder available in this environment', {
+							environment: typeof window !== 'undefined' ? 'browser' : 'node',
+							suggestion: 'Ensure Buffer is available or use a base64 polyfill',
+						});
 					})();
-	// 4. Map to bytes
-	const bytes = new Uint8Array(bin.length);
-	for (let i = 0; i < bin.length; i++) {
-		bytes[i] = bin.charCodeAt(i);
-	}
-	return bytes;
+	// 4. Map to bytes - optimized conversion
+	return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 }
 
 /**
  * Convert a base64url‐encoded *string* or a Uint8Array/ArrayBufferView
  * into a Uint8Array of raw bytes.
  */
-export function toView(value: string | ArrayBufferView): Uint8Array {
+export function toView(value: string | ArrayBufferView | Buffer): Uint8Array {
+	if (Buffer.isBuffer(value)) {
+		return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+	}
+
 	if (ArrayBuffer.isView(value)) {
 		return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
 	}
@@ -96,12 +112,16 @@ export function toView(value: string | ArrayBufferView): Uint8Array {
 		return decodeBase64UrlToBytes(value);
 	}
 
-	throw new Error('Unexpected type in toView(); expected string or Uint8Array');
+	throw new EncodingError(ErrorCode.ENCODING_UNSUPPORTED_INPUT_TYPE, 'Unsupported input type for toView conversion', {
+		provided: typeof value,
+		supportedTypes: ['string', 'Buffer', 'Uint8Array', 'ArrayBufferView'],
+		suggestion: 'Convert input to string (base64url) or byte array format',
+	});
 }
 
 /** Helper to detect byte arrays */
-export function isBytes(value: unknown): value is ArrayBufferView | ArrayBuffer {
-	return value instanceof ArrayBuffer || ArrayBuffer.isView(value);
+export function isBytes(value: unknown): value is ArrayBufferView | ArrayBuffer | Buffer {
+	return value instanceof ArrayBuffer || ArrayBuffer.isView(value) || Buffer.isBuffer(value);
 }
 
 /** Helper to detect plain objects */
@@ -129,7 +149,64 @@ export async function hasNewline(value: string | Blob | ArrayBufferView | ArrayB
 	return false;
 }
 
-/** SHA-256 digest */
+/** Simple LRU cache for hash results */
+class HashCache {
+	private cache = new Map<string, ArrayBuffer>();
+	private maxSize = 100; // Limit cache size
+
+	private getKey(data: ArrayBuffer | Uint8Array): string {
+		// Create a simple key from the first and last few bytes + length
+		const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
+		if (bytes.length <= 16) {
+			return Array.from(bytes).join(',');
+		}
+		// For larger arrays, use first 8 + last 8 bytes + length as key
+		const key =
+			Array.from(bytes.slice(0, 8)).join(',') + '|' + Array.from(bytes.slice(-8)).join(',') + '|' + bytes.length;
+		return key;
+	}
+
+	get(data: ArrayBuffer | Uint8Array): ArrayBuffer | undefined {
+		const key = this.getKey(data);
+		const result = this.cache.get(key);
+		if (result) {
+			// Move to end (most recently used)
+			this.cache.delete(key);
+			this.cache.set(key, result);
+		}
+		return result;
+	}
+
+	set(data: ArrayBuffer | Uint8Array, hash: ArrayBuffer): void {
+		const key = this.getKey(data);
+
+		// Remove oldest entry if cache is full
+		if (this.cache.size >= this.maxSize) {
+			const firstKey = this.cache.keys().next().value;
+			this.cache.delete(firstKey as any);
+		}
+
+		// Store the hash result
+		this.cache.set(key, hash.slice()); // Clone the buffer
+	}
+}
+
+// Global hash cache instance
+const hashCache = new HashCache();
+
+/** SHA-256 digest with caching */
 export async function sha256(data: ArrayBuffer): Promise<ArrayBuffer> {
-	return crypto.subtle.digest('SHA-256', data);
+	// Check cache first
+	const cached = hashCache.get(data);
+	if (cached) {
+		return cached.slice(); // Return a copy
+	}
+
+	// Compute hash
+	const hash = await crypto.subtle.digest('SHA-256', data);
+
+	// Cache the result
+	hashCache.set(data, hash);
+
+	return hash;
 }

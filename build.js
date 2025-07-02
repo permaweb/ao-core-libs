@@ -40,7 +40,7 @@ const nodeCjsConfig = {
 		'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
 	},
 	external: ['process', 'stream/promises', '@dha-team/arbundles', 'http-message-signatures'],
-	plugins: [nodeAlias, dtsPlugin({ outDir: typesDir })],
+	plugins: [nodeAlias], // , dtsPlugin({ outDir: typesDir })
 };
 
 const nodeEsmConfig = {

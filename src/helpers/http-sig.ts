@@ -1,6 +1,8 @@
 import { httpbis } from 'http-message-signatures';
 import { parseItem, serializeList } from 'structured-headers';
 
+import { CryptographicError, EncodingError, ErrorCode } from './errors.ts';
+import { validateHashInput, validateSignatureData } from './security.ts';
 import {
 	CreateFn,
 	HttpRequest,
@@ -57,40 +59,55 @@ function hbEncodeValue(value: unknown): [string | undefined, string | Uint8Array
 	if (typeof value === 'symbol') {
 		return ['atom', value.description ?? ''];
 	}
-	throw new Error(`Cannot encode value: ${String(value)}`);
+	throw new EncodingError(ErrorCode.ENCODING_UNSUPPORTED_VALUE, `Cannot encode value of type ${typeof value}`, {
+		value: String(value),
+		type: typeof value,
+		suggestion: 'Supported types: string, Uint8Array, number, array, symbol',
+	});
 }
 
 /**
  * Lift and flatten nested fields for multipart encoding
  */
 export function hbEncodeLift(obj: POJO, parent: string = '', top: POJO = {}): POJO {
-	const [flatObj, typesObj] = Object.entries({ ...obj }).reduce(
-		([flat, types], [key, val]) => {
-			const flatKey = parent ? `${parent}/${key}`.toLowerCase() : key.toLowerCase();
-			if (val == null) return [flat, types];
-			let value = val;
-			if (Array.isArray(value) && value.some(isPojo)) {
-				// Convert array of POJOs to object by index
-				value = value.reduce((acc, v, i) => ({ ...acc, [i]: v }), {} as POJO);
+	const flatObj: POJO = {};
+	const typesObj: POJO = {};
+
+	// Use for...in loop to avoid object spread and reduce overhead
+	for (const key in obj) {
+		if (!obj.hasOwnProperty(key)) continue;
+
+		const val = obj[key];
+		const flatKey = parent ? `${parent}/${key}`.toLowerCase() : key.toLowerCase();
+
+		if (val == null) continue;
+
+		let value = val;
+		if (Array.isArray(value) && value.some(isPojo)) {
+			// Convert array of POJOs to object by index - optimized
+			const converted: POJO = {};
+			for (let i = 0; i < value.length; i++) {
+				converted[i] = value[i];
 			}
-			if (isPojo(value)) {
-				hbEncodeLift(value, flatKey, top);
-				return [flat, types];
+			value = converted;
+		}
+
+		if (isPojo(value)) {
+			hbEncodeLift(value as any, flatKey, top);
+			continue;
+		}
+
+		const [type, encoded] = hbEncodeValue(value);
+		if (encoded !== undefined) {
+			const size = typeof encoded === 'string' ? Buffer.byteLength(encoded) : (encoded as Uint8Array).byteLength;
+			if (size > MAX_HEADER_LENGTH) {
+				top[flatKey] = encoded;
+			} else {
+				flatObj[key] = encoded;
 			}
-			const [type, encoded] = hbEncodeValue(value);
-			if (encoded !== undefined) {
-				const size = typeof encoded === 'string' ? Buffer.byteLength(encoded) : (encoded as Uint8Array).byteLength;
-				if (size > MAX_HEADER_LENGTH) {
-					top[flatKey] = encoded;
-				} else {
-					flat[key] = encoded;
-				}
-			}
-			if (type) types[key] = type;
-			return [flat, types];
-		},
-		[{} as POJO, {} as POJO],
-	);
+		}
+		if (type) typesObj[key] = type;
+	}
 
 	if (Object.keys(flatObj).length === 0 && !parent) return top;
 
@@ -164,13 +181,15 @@ export function toHttpSigner(signer: SignerType) {
 					keyid: encodeBase64Url(publicKey),
 					alg,
 				},
-			} as any);
+			});
 
 			// Build the (field → value) list
-			const signatureBaseList = httpbis.createSignatureBase({ fields }, request as any);
+			const signatureBaseList = httpbis.createSignatureBase({ fields }, request);
 
 			// Serialize “@signature-params” and append it
-			const signatureInput = serializeList([[signatureBaseList.map(([item]) => parseItem(item)), signingParameters]]);
+			const signatureInput = serializeList([
+				[signatureBaseList.map(([item]: any) => parseItem(item)), signingParameters],
+			]);
 			signatureBaseList.push(['"@signature-params"', [signatureInput]]);
 
 			// Turn it into the wire‐format string
@@ -188,14 +207,28 @@ export function toHttpSigner(signer: SignerType) {
 		const { signature, address } = await signer(create, SigningFormatType.HTTP_SIG);
 
 		if (!createCalled) {
-			throw new Error('create() must be invoked to construct the data to sign');
+			throw new CryptographicError(
+				ErrorCode.CRYPTO_CREATE_NOT_INVOKED,
+				'Signer did not invoke create() function for HTTP signature',
+				{
+					suggestion: 'Check signer implementation - create() must be called to generate signature base',
+				},
+			);
 		}
 		if (!signature) {
-			throw new Error('signer must return a `signature` property');
+			throw new CryptographicError(
+				ErrorCode.CRYPTO_MISSING_SIGNATURE,
+				'Signer result missing required signature property for HTTP signature',
+				{
+					returned: Object.keys({ signature, address }),
+					suggestion: 'HTTP signer must return signature and address properties',
+				},
+			);
 		}
 
-		// Splice the signature into headers
+		// Validate and process the signature
 		const rawSig = toView(signature);
+		validateSignatureData(rawSig, 'HTTP signature');
 		const sigB64 = encodeBase64Url(rawSig);
 		const sigBuffer = Buffer.from(sigB64, 'base64url');
 		const signedHeaders = httpbis.augmentHeaders(
@@ -208,7 +241,7 @@ export function toHttpSigner(signer: SignerType) {
 		// Return the signed request
 		return {
 			...request,
-			headers: signedHeaders as any,
+			headers: signedHeaders as Record<string, string>,
 		};
 	};
 }
@@ -262,7 +295,9 @@ export async function toHBRequest(obj: POJO = {}): Promise<{ headers: Headers; b
 			// Multipart
 			const partsBuffers = await Promise.all(bodyKeys.map((k) => (flattened[k] as Blob).arrayBuffer()));
 			const base = new Blob(partsBuffers.flatMap((buf, i) => (i < partsBuffers.length - 1 ? [buf, '\r\n'] : [buf])));
-			const hash = await sha256(await base.arrayBuffer());
+			const baseBuffer = await base.arrayBuffer();
+			validateHashInput(baseBuffer, 'multipart boundary data');
+			const hash = await sha256(baseBuffer);
 			const boundary = encodeBase64Url(hash);
 
 			const sections: (string | ArrayBuffer)[] = [];
@@ -275,6 +310,7 @@ export async function toHBRequest(obj: POJO = {}): Promise<{ headers: Headers; b
 			body = new Blob(sections);
 		}
 		const finalBuf = await (body as Blob).arrayBuffer();
+		validateHashInput(finalBuf, 'content digest data');
 		const cdHash = await sha256(finalBuf);
 		const cdB64 = encodeBase64Url(cdHash);
 		headers.append('Content-Digest', `sha-256=:${cdB64}:`);
