@@ -1,7 +1,7 @@
 import { createData, DataItem, SIG_CONFIG } from '@dha-team/arbundles';
 
-import { ANS104RequestResult, CreateInput, DataItemFields, DataItemOptions, DataItemSigner, RequestFormatType, SignedDataItemResult, SignerType } from './types.ts';
-import { debugLog, encodeBase64Url, toView } from './utils.ts';
+import { ANS104RequestResult, CreateInput, DataItemFields, DataItemOptions, DataItemSigner, RequestFormatType, SignedDataItemResult, SignerType } from './types';
+import { debugLog, encodeBase64Url, toView } from './utils';
 
 export function createDataItemBytes(data: any, signer: any, opts: any) {
 	const signerMeta = (SIG_CONFIG as any)[signer.type];

@@ -6,7 +6,7 @@ try {
 	hasNodeBuffer = true;
 } catch {}
 
-import { DebugLogType, DependenciesType, POJO, RequestType } from './types.ts';
+import { DebugLogType, DependenciesType, POJO, RequestType } from './types';
 
 const raw = process.env.DEBUG ?? '';
 const enabled = new Set(raw.split(',').map((s) => s.trim()));

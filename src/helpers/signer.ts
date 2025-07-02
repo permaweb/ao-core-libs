@@ -1,6 +1,6 @@
 import { constants, createHash, createPrivateKey, createSign } from 'crypto';
 
-import { CreateFn, JWK, RequestFormatType, SignatureResult, SignerOptions, SignerType } from './types.ts';
+import { CreateFn, JWK, RequestFormatType, SignatureResult, SignerOptions, SignerType } from './types';
 
 export function createANS104Signer({
 	privateKey,

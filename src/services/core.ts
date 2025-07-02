@@ -1,7 +1,7 @@
-import { toANS104Request, toDataItemSigner } from 'helpers/data-item.ts';
-import { toHBRequest, toHttpSigner, toSigBaseArgs } from 'helpers/http-sig.ts';
-import { DependenciesType, HttpRequest, RequestFormatType, RequestType } from 'helpers/types.ts';
-import { debugLog, joinURL } from 'helpers/utils.ts';
+import { toANS104Request, toDataItemSigner } from '../helpers/data-item';
+import { toHBRequest, toHttpSigner, toSigBaseArgs } from '../helpers/http-sig';
+import { DependenciesType, HttpRequest, RequestFormatType, RequestType } from '../helpers/types';
+import { debugLog, joinURL } from '../helpers/utils';
 
 export function request(deps: DependenciesType) {
 	return async (args: RequestType): Promise<Response> => {

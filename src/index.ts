@@ -1,7 +1,6 @@
-import { request } from 'services/core.ts';
-
-import { createSigner } from 'helpers/signer.ts';
-import { DependenciesType } from 'helpers/types.ts';
+import { request } from './services/core';
+import { createSigner } from './helpers/signer';
+import { DependenciesType } from './helpers/types';
 
 const DEFAULT_URL = 'https://forward.computer';
 

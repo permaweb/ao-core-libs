@@ -10,8 +10,8 @@ import {
 	SigBaseInput,
 	SigBaseOutput,
 	SignerType,
-} from './types.ts';
-import { debugLog, decodeBase64UrlToBytes, encodeBase64Url, hasNewline, isBytes, isPojo, sha256, toView } from './utils.ts';
+} from './types';
+import { debugLog, decodeBase64UrlToBytes, encodeBase64Url, hasNewline, isBytes, isPojo, sha256, toView } from './utils';
 
 const MAX_HEADER_LENGTH = 4096;
 
