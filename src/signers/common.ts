@@ -1,8 +1,8 @@
 import { constants, createHash, createPrivateKey, createSign } from 'crypto';
 
-import { CreateFn, JWK, RequestFormatType, SignatureResult, SignerOptions, SignerType } from './types';
-import { CryptographicError, ErrorCode } from './errors';
-import { validateJWK, validateSignatureData, cryptoRateLimiter, constantTimeEquals } from './security';
+import { CryptographicError, ErrorCode } from '../helpers/errors.ts';
+import { constantTimeEquals,cryptoRateLimiter, validateJWK, validateSignatureData } from '../helpers/security.ts';
+import { CreateFn, JWK, SignatureResult, SignerOptions, SignerType,SigningFormatType } from '../helpers/types.ts';
 
 export function createANS104Signer({
 	privateKey,
@@ -10,7 +10,7 @@ export function createANS104Signer({
 	address,
 }: SignerOptions): (create: CreateFn) => Promise<SignatureResult> {
 	return async (create) => {
-		// 1) ask the create‐fn for our deep‐hash
+		// 1) Ask the create‐fn for our deep‐hash
 		const deepHash = await create({
 			type: 1,
 			publicKey,
@@ -88,20 +88,20 @@ export function createSigner(wallet: JWK): SignerType {
 	// decode the base64url public modulus
 	const publicKey = Buffer.from(wallet.n, 'base64url');
 
-	// turn the JWK into a Crypto KeyObject
-	const privateKey = createPrivateKey({ key: wallet, format: 'jwk' });
+	// Turn the JWK into a Crypto KeyObject
+	const privateKey = createPrivateKey({ key: wallet as any, format: 'jwk' });
 
-	// derive the Arweave address = sha256(publicKey) in base64url
+	// Derive the Arweave address = sha256(publicKey) in base64url
 	const address = createHash('sha256').update(publicKey).digest('base64url');
 
 	const dataItemSigner = createANS104Signer({ privateKey, publicKey, address });
 	const httpSigner = createHttpSigner({ privateKey, publicKey, address });
 
-	return (create: CreateFn, kind: RequestFormatType) => {
+	return (create: CreateFn, kind: SigningFormatType) => {
 		switch (kind) {
-			case RequestFormatType.ANS_104:
+			case SigningFormatType.ANS_104:
 				return dataItemSigner(create);
-			case RequestFormatType.HTTP_SIG:
+			case SigningFormatType.HTTP_SIG:
 				return httpSigner(create);
 			default:
 				throw new CryptographicError(
@@ -109,7 +109,7 @@ export function createSigner(wallet: JWK): SignerType {
 					`Unknown signer type: ${kind}`,
 					{
 						provided: kind,
-						supportedTypes: Object.values(RequestFormatType),
+						supportedTypes: Object.values(SigningFormatType),
 						suggestion: 'Use ANS-104 or HTTP-SIG signing format'
 					}
 				);

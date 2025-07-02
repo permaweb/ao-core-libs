@@ -6,27 +6,31 @@ import { createRequire } from 'module';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Setup __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
 
-// Paths
 const projectRoot = __dirname;
 const srcDir = path.resolve(projectRoot, 'src');
 const distDir = path.resolve(projectRoot, 'dist');
 const typesDir = path.resolve(distDir, 'types');
 
-// Shared build settings
 const sharedConfig = {
 	entryPoints: [path.resolve(srcDir, 'index.ts')],
 	bundle: true,
 	sourcemap: true,
 	minify: true,
-	target: ['node14'], // adjust as needed
+	target: ['es2020'],
 };
 
-// Node CJS build
+const nodeAlias = alias({
+	signers: path.resolve(srcDir, 'signers/common.ts'),
+});
+
+const browserAlias = alias({
+	signers: path.resolve(srcDir, 'signers/browser.ts'),
+});
+
 const nodeCjsConfig = {
 	...sharedConfig,
 	platform: 'node',
@@ -36,46 +40,45 @@ const nodeCjsConfig = {
 		'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
 	},
 	external: ['process', 'stream/promises', '@dha-team/arbundles', 'http-message-signatures'],
-	plugins: [dtsPlugin({ outDir: typesDir })],
+	plugins: [nodeAlias], // , dtsPlugin({ outDir: typesDir })
 };
 
-// Node ESM build
 const nodeEsmConfig = {
 	...nodeCjsConfig,
 	format: 'esm',
 	outfile: path.resolve(distDir, 'index.js'),
-	external: ['process', 'stream/promises', '@dha-team/arbundles', 'http-message-signatures'],
 };
 
-// Browser ESM build
 const browserConfig = {
 	...sharedConfig,
 	platform: 'browser',
 	format: 'esm',
-	outfile: path.resolve(distDir, 'index.esm.js'),
-	define: {
-		'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
-	},
-	external: ['fs', 'os', 'path', 'http', 'https', 'zlib'],
 	plugins: [
-		alias({
-			'node:process': require.resolve('process/browser'),
-			crypto: require.resolve('crypto-browserify'),
-			'node:crypto': require.resolve('crypto-browserify'),
-			// 'buffer': require.resolve('buffer/'),
-		}),
+		browserAlias,
 		nodeModulesPolyfillPlugin({
-			globals: { process: true, Buffer: true },
-			modules: { crypto: true, stream: true, events: true, util: true, buffer: true },
+			modules: {
+				crypto: true,
+				constants: true,
+				events: true,
+				stream: true,
+			},
 		}),
-		dtsPlugin({ outDir: typesDir }),
+		alias({
+			crypto: require.resolve('crypto-browserify'),
+			constants: require.resolve('constants-browserify'),
+			stream: require.resolve('stream-browserify'),
+			process: require.resolve('process/browser'),
+		}),
 	],
+	bundle: true,
+	minify: true,
+	outfile: path.resolve(distDir, 'index.esm.js'),
+	external: ['fs', 'os', 'path', 'http', 'https', 'zlib'],
 };
 
-// Build execution
 (async () => {
 	try {
-		const configs = [nodeCjsConfig, nodeEsmConfig]; // browserConfig
+		const configs = [nodeCjsConfig, nodeEsmConfig, browserConfig];
 		for (const cfg of configs) {
 			console.log(`Building ${path.relative(projectRoot, cfg.outfile)} (${cfg.platform}/${cfg.format})...`);
 			await esbuild.build(cfg);

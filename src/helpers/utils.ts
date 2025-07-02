@@ -6,8 +6,8 @@ try {
 	hasNodeBuffer = true;
 } catch {}
 
-import { DebugLogType, DependenciesType, POJO, RequestType } from './types';
-import { EncodingError, ErrorCode } from './errors';
+import { EncodingError, ErrorCode } from './errors.ts';
+import { DebugLogType, POJO } from './types.ts';
 
 const raw = process.env.DEBUG ?? '';
 const enabled = new Set(raw.split(',').map((s) => s.trim()));
@@ -46,8 +46,8 @@ export function buildPath(args: { process?: string; device?: string; path: strin
 export function joinURL(args: { url: string; path: string }) {
 	if (!args.path) return args.url;
 	if (args.path.startsWith('/')) return joinURL({ url: args.url, path: args.path.slice(1) });
-	args.url = new URL(args.url);
-	args.url.pathname += args.path;
+	(args.url as any) = new URL(args.url);
+	(args.url as any).pathname += args.path;
 	return args.url.toString();
 }
 
@@ -86,17 +86,13 @@ export function decodeBase64UrlToBytes(b64url: string): Uint8Array {
 			: hasNodeBuffer
 				? NodeBuffer.from(b64, 'base64').toString('binary')
 				: (() => {
-						throw new EncodingError(
-							ErrorCode.ENCODING_NO_DECODER,
-							'No base64 decoder available in this environment',
-							{
-								environment: typeof window !== 'undefined' ? 'browser' : 'node',
-								suggestion: 'Ensure Buffer is available or use a base64 polyfill'
-							}
-						);
+						throw new EncodingError(ErrorCode.ENCODING_NO_DECODER, 'No base64 decoder available in this environment', {
+							environment: typeof window !== 'undefined' ? 'browser' : 'node',
+							suggestion: 'Ensure Buffer is available or use a base64 polyfill',
+						});
 					})();
 	// 4. Map to bytes - optimized conversion
-	return Uint8Array.from(bin, c => c.charCodeAt(0));
+	return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 }
 
 /**
@@ -107,7 +103,7 @@ export function toView(value: string | ArrayBufferView | Buffer): Uint8Array {
 	if (Buffer.isBuffer(value)) {
 		return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
 	}
-	
+
 	if (ArrayBuffer.isView(value)) {
 		return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
 	}
@@ -116,15 +112,11 @@ export function toView(value: string | ArrayBufferView | Buffer): Uint8Array {
 		return decodeBase64UrlToBytes(value);
 	}
 
-	throw new EncodingError(
-		ErrorCode.ENCODING_UNSUPPORTED_INPUT_TYPE,
-		'Unsupported input type for toView conversion',
-		{
-			provided: typeof value,
-			supportedTypes: ['string', 'Buffer', 'Uint8Array', 'ArrayBufferView'],
-			suggestion: 'Convert input to string (base64url) or byte array format'
-		}
-	);
+	throw new EncodingError(ErrorCode.ENCODING_UNSUPPORTED_INPUT_TYPE, 'Unsupported input type for toView conversion', {
+		provided: typeof value,
+		supportedTypes: ['string', 'Buffer', 'Uint8Array', 'ArrayBufferView'],
+		suggestion: 'Convert input to string (base64url) or byte array format',
+	});
 }
 
 /** Helper to detect byte arrays */
@@ -161,7 +153,7 @@ export async function hasNewline(value: string | Blob | ArrayBufferView | ArrayB
 class HashCache {
 	private cache = new Map<string, ArrayBuffer>();
 	private maxSize = 100; // Limit cache size
-	
+
 	private getKey(data: ArrayBuffer | Uint8Array): string {
 		// Create a simple key from the first and last few bytes + length
 		const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
@@ -169,11 +161,11 @@ class HashCache {
 			return Array.from(bytes).join(',');
 		}
 		// For larger arrays, use first 8 + last 8 bytes + length as key
-		const key = Array.from(bytes.slice(0, 8)).join(',') + '|' + 
-					Array.from(bytes.slice(-8)).join(',') + '|' + bytes.length;
+		const key =
+			Array.from(bytes.slice(0, 8)).join(',') + '|' + Array.from(bytes.slice(-8)).join(',') + '|' + bytes.length;
 		return key;
 	}
-	
+
 	get(data: ArrayBuffer | Uint8Array): ArrayBuffer | undefined {
 		const key = this.getKey(data);
 		const result = this.cache.get(key);
@@ -184,16 +176,16 @@ class HashCache {
 		}
 		return result;
 	}
-	
+
 	set(data: ArrayBuffer | Uint8Array, hash: ArrayBuffer): void {
 		const key = this.getKey(data);
-		
+
 		// Remove oldest entry if cache is full
 		if (this.cache.size >= this.maxSize) {
 			const firstKey = this.cache.keys().next().value;
-			this.cache.delete(firstKey);
+			this.cache.delete(firstKey as any);
 		}
-		
+
 		// Store the hash result
 		this.cache.set(key, hash.slice()); // Clone the buffer
 	}
@@ -209,12 +201,12 @@ export async function sha256(data: ArrayBuffer): Promise<ArrayBuffer> {
 	if (cached) {
 		return cached.slice(); // Return a copy
 	}
-	
+
 	// Compute hash
 	const hash = await crypto.subtle.digest('SHA-256', data);
-	
+
 	// Cache the result
 	hashCache.set(data, hash);
-	
+
 	return hash;
 }

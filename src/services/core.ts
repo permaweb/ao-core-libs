@@ -1,109 +1,48 @@
-import { toANS104Request, toDataItemSigner } from '../helpers/data-item';
-import { toHBRequest, toHttpSigner, toSigBaseArgs } from '../helpers/http-sig';
-import { DependenciesType, HttpRequest, RequestFormatType, RequestType } from '../helpers/types';
-import { debugLog, joinURL } from '../helpers/utils';
-import { ValidationError, RequestError, ErrorCode } from '../helpers/errors';
-
-/** Simple request cache with TTL */
-class RequestCache {
-	private cache = new Map<string, { response: Response; timestamp: number }>();
-	private readonly ttlMs: number;
-	private readonly maxSize: number;
-
-	constructor(ttlMs: number = 30000, maxSize: number = 50) {
-		this.ttlMs = ttlMs;
-		this.maxSize = maxSize;
-	}
-
-	private getKey(url: string, method: string, body?: BodyInit): string {
-		// Create cache key from URL, method, and body hash
-		const bodyStr = body ? (typeof body === 'string' ? body : body.toString()) : '';
-		return `${method}:${url}:${bodyStr.length}:${bodyStr.slice(0, 100)}`;
-	}
-
-	get(url: string, method: string, body?: BodyInit): Response | null {
-		const key = this.getKey(url, method, body);
-		const entry = this.cache.get(key);
-		
-		if (!entry) return null;
-		
-		// Check if expired
-		if (Date.now() - entry.timestamp > this.ttlMs) {
-			this.cache.delete(key);
-			return null;
-		}
-		
-		// Clone response to avoid issues with consumed streams
-		return entry.response.clone();
-	}
-
-	set(url: string, method: string, response: Response, body?: BodyInit): void {
-		// Only cache successful GET requests to avoid side effects
-		if (method !== 'GET' || !response.ok) return;
-		
-		const key = this.getKey(url, method, body);
-		
-		// Remove oldest entry if cache is full
-		if (this.cache.size >= this.maxSize) {
-			const firstKey = this.cache.keys().next().value;
-			this.cache.delete(firstKey);
-		}
-		
-		// Store cloned response to avoid stream consumption issues
-		this.cache.set(key, {
-			response: response.clone(),
-			timestamp: Date.now()
-		});
-	}
-}
-
-// Global request cache instance
-const requestCache = new RequestCache();
+import { toANS104Request, toDataItemSigner } from '../helpers/data-item.ts';
+import { ErrorCode, RequestError, ValidationError } from '../helpers/errors.ts';
+import { toHBRequest, toHttpSigner, toSigBaseArgs } from '../helpers/http-sig.ts';
+import { DependenciesType, HttpRequest, RequestType, SigningFormatType } from '../helpers/types.ts';
+import { debugLog, joinURL } from '../helpers/utils.ts';
 
 export function request(deps: DependenciesType) {
 	return async (args: RequestType): Promise<Response> => {
 		validateRequest(args);
 
-		const requestURL = joinURL({ url: deps.url, path: args.path });
-		const requestMethod = args.method ?? 'GET';
+		const signingFormat = args.signingFormat ?? SigningFormatType.HTTP_SIG;
+		const requestURL = joinURL({ url: deps.url!, path: args.path });
+
+		/* GET Requests do not allow for a body, while ANS-104 uses the data item as the body */
+		const requestMethod = signingFormat === SigningFormatType.ANS_104 ? 'POST' : (args.method ?? 'GET');
+
+		const { path, method, ...remainingFields } = args;
+
+		/* Ensure the signing format is present on remaining fields if not passed in args */
+		if (!remainingFields.signingFormat) remainingFields.signingFormat = signingFormat;
 
 		debugLog('info', 'Request URL:', requestURL);
-
-		// Check cache for GET requests
-		if (requestMethod === 'GET') {
-			const cachedResponse = requestCache.get(requestURL, requestMethod);
-			if (cachedResponse) {
-				debugLog('info', 'Cache hit for request:', requestURL);
-				return cachedResponse;
-			}
-		}
+		debugLog('info', 'Signing Format:', signingFormat);
 
 		let unsignedRequest = null;
 		let signedRequest = null;
 		let httpRequest: HttpRequest | null = null;
 
-		 const { path, method, ...remainingFields } = args;
-
-		const signingFormat = args.signingFormat ?? RequestFormatType.HTTP_SIG;
-
 		try {
-			debugLog('info', 'Signing Format:', signingFormat);
-
 			switch (signingFormat) {
-				case RequestFormatType.ANS_104:
+				case SigningFormatType.ANS_104:
 					unsignedRequest = toANS104Request(remainingFields);
-					signedRequest = await toDataItemSigner(deps.signer)(unsignedRequest.item);
+					signedRequest = await toDataItemSigner(deps.signer!)(unsignedRequest.item);
 
 					httpRequest = {
 						headers: unsignedRequest.headers,
-						body: signedRequest.raw
-					}
+						body: signedRequest.raw,
+					};
 
 					break;
-				case RequestFormatType.HTTP_SIG:
+				case SigningFormatType.HTTP_SIG:
 					unsignedRequest = await toHBRequest(remainingFields);
 
 					if (unsignedRequest && deps.signer) {
+						console.log('H3');
 						const signingArgs = toSigBaseArgs({
 							url: requestURL,
 							method: requestMethod,
@@ -116,14 +55,10 @@ export function request(deps: DependenciesType) {
 
 						break;
 					} else {
-						throw new RequestError(
-							ErrorCode.REQUEST_PREPARATION_FAILED,
-							'Error preparing HTTP-SIG request',
-							{ 
-								signingFormat,
-								suggestion: 'Check signer configuration and request parameters' 
-							}
-						);
+						throw new RequestError(ErrorCode.REQUEST_PREPARATION_FAILED, 'Error preparing HTTP-SIG request', {
+							signingFormat,
+							suggestion: 'Check signer configuration and request parameters',
+						});
 					}
 			}
 		} catch (e: unknown) {
@@ -131,7 +66,7 @@ export function request(deps: DependenciesType) {
 				ErrorCode.REQUEST_FORMATTING_FAILED,
 				'Failed to format request for signing',
 				{ signingFormat, path: args.path },
-				e instanceof Error ? e : undefined
+				e instanceof Error ? e : undefined,
 			);
 		}
 
@@ -143,29 +78,29 @@ export function request(deps: DependenciesType) {
 					unsignedRequest: !!unsignedRequest,
 					signedRequest: !!signedRequest,
 					httpRequest: !!httpRequest,
-					suggestion: 'Check signer configuration and request parameters'
-				}
+					suggestion: 'Check signer configuration and request parameters',
+				},
 			);
 		}
-		
+
 		debugLog('info', 'Signed Request', signedRequest);
 		debugLog('info', 'HTTP Request', httpRequest);
 
 		try {
-			const response = await fetch(requestURL, {
+			const httpRequestArgs: any = {
 				method: requestMethod,
 				headers: httpRequest.headers,
-				body: httpRequest.body,
 				redirect: 'follow',
-			});
-
-			if (!response.ok) {
-				debugLog('error', 'HTTP Response:', response)
-				debugLog('error', 'HTTP Response Body:', await response.text());
 			};
 
-			// Cache successful responses
-			requestCache.set(requestURL, requestMethod, response, httpRequest.body);
+			if (requestMethod !== 'GET') httpRequestArgs.body = httpRequest.body;
+
+			const response = await fetch(requestURL, httpRequestArgs);
+
+			if (!response.ok) {
+				debugLog('error', 'HTTP Response:', response);
+				debugLog('error', 'HTTP Response Body:', await response.text());
+			}
 
 			return response;
 		} catch (e: unknown) {
@@ -173,7 +108,7 @@ export function request(deps: DependenciesType) {
 				ErrorCode.REQUEST_HTTP_FAILED,
 				'HTTP request failed',
 				{ url: requestURL, method: requestMethod },
-				e instanceof Error ? e : undefined
+				e instanceof Error ? e : undefined,
 			);
 		}
 	};
@@ -181,44 +116,24 @@ export function request(deps: DependenciesType) {
 
 export function validateRequest(args: RequestType): void {
 	if (!args) {
-		throw new ValidationError(
-			ErrorCode.VALIDATION_MISSING_PATH,
-			'Request arguments object is required',
-			{ suggestion: 'Provide an object with at least a path property' }
-		);
+		throw new ValidationError(ErrorCode.VALIDATION_MISSING_PATH, 'Request arguments object is required', {
+			suggestion: 'Provide an object with at least a path property',
+		});
 	}
 
 	if (!args.path) {
-		throw new ValidationError(
-			ErrorCode.VALIDATION_MISSING_PATH,
-			'Path is required for all requests',
-			{ 
-				provided: Object.keys(args),
-				suggestion: 'Add path property with the API endpoint path'
-			}
-		);
+		throw new ValidationError(ErrorCode.VALIDATION_MISSING_PATH, 'Path is required for all requests', {
+			provided: Object.keys(args),
+			suggestion: 'Add path property with the API endpoint path',
+		});
 	}
 
-	const validFormats = Object.values(RequestFormatType);
+	const validFormats = Object.values(SigningFormatType);
 	if (args.signingFormat && !validFormats.includes(args.signingFormat)) {
-		throw new ValidationError(
-			ErrorCode.VALIDATION_INVALID_FORMAT,
-			`Invalid signing format: ${args.signingFormat}`,
-			{
-				provided: args.signingFormat,
-				validFormats,
-				suggestion: `Use one of: ${validFormats.join(', ')}`
-			}
-		);
-	}
-}
-
-// Legacy function for backward compatibility
-export function getValidationError(args: RequestType): string | null {
-	try {
-		validateRequest(args);
-		return null;
-	} catch (error) {
-		return error instanceof Error ? error.message : 'Validation failed';
+		throw new ValidationError(ErrorCode.VALIDATION_INVALID_FORMAT, `Invalid signing format: ${args.signingFormat}`, {
+			provided: args.signingFormat,
+			validFormats,
+			suggestion: `Use one of: ${validFormats.join(', ')}`,
+		});
 	}
 }

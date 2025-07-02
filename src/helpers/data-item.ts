@@ -1,9 +1,9 @@
 import { createData, DataItem, SIG_CONFIG } from '@dha-team/arbundles';
 
-import { ANS104RequestResult, CreateInput, DataItemFields, DataItemOptions, DataItemSigner, RequestFormatType, SignedDataItemResult, SignerType } from './types';
-import { debugLog, encodeBase64Url, toView, sha256 } from './utils';
-import { CryptographicError, ValidationError, ErrorCode } from './errors';
-import { validateSignatureData, validateHashInput, constantTimeEquals } from './security';
+import { CryptographicError, ErrorCode, ValidationError } from './errors.ts';
+import { validateHashInput, validateSignatureData } from './security.ts';
+import { CreateInput, DataItemFields, SignerType, SigningFormatType } from './types.ts';
+import { debugLog, encodeBase64Url, sha256, toView } from './utils.ts';
 
 export function createDataItemBytes(data: any, signer: any, opts: any) {
 	const signerMeta = (SIG_CONFIG as any)[signer.type];
@@ -14,8 +14,8 @@ export function createDataItemBytes(data: any, signer: any, opts: any) {
 			{
 				signerType: signer.type,
 				availableTypes: Object.keys(SIG_CONFIG),
-				suggestion: 'Verify signer type is supported by arbundles library'
-			}
+				suggestion: 'Verify signer type is supported by arbundles library',
+			},
 		);
 	}
 
@@ -31,7 +31,7 @@ export function createDataItemBytes(data: any, signer: any, opts: any) {
 export async function getRawAndId(dataItemBytes: Uint8Array) {
 	// Validate input data
 	validateHashInput(dataItemBytes, 'data item bytes');
-	
+
 	const dataItem = new DataItem(dataItemBytes);
 
 	/**
@@ -88,19 +88,15 @@ export function toDataItemSigner(signer: SignerType) {
 		}
 
 		// Ask the signer to sign our payload
-		const res = await signer(create, RequestFormatType.ANS_104);
+		const res = await signer(create, SigningFormatType.ANS_104);
 
 		debugLog('info', 'Signed Result', res);
 
 		// Make sure create() actually ran
 		if (!createCalled) {
-			throw new CryptographicError(
-				ErrorCode.CRYPTO_CREATE_NOT_INVOKED,
-				'Signer did not invoke create() function',
-				{
-					suggestion: 'Check signer implementation - create() must be called to generate signature data'
-				}
-			);
+			throw new CryptographicError(ErrorCode.CRYPTO_CREATE_NOT_INVOKED, 'Signer did not invoke create() function', {
+				suggestion: 'Check signer implementation - create() must be called to generate signature data',
+			});
 		}
 
 		// If the signer already returned a full DataItem, just pass it through
@@ -115,8 +111,8 @@ export function toDataItemSigner(signer: SignerType) {
 				'Signer result missing required signature property',
 				{
 					returned: Object.keys(res || {}),
-					suggestion: 'Signer must return an object with signature property'
-				}
+					suggestion: 'Signer must return an object with signature property',
+				},
 			);
 		}
 		const rawSig = toView(res.signature);
@@ -127,7 +123,7 @@ export function toDataItemSigner(signer: SignerType) {
 
 		// Validate signature data before verification
 		validateSignatureData(rawSig, 'data item signature');
-		
+
 		// Verify it before returning
 		const isValid = await verify(signedBytes);
 		if (!isValid) {
@@ -135,8 +131,8 @@ export function toDataItemSigner(signer: SignerType) {
 				ErrorCode.CRYPTO_INVALID_SIGNATURE,
 				'Generated data item signature failed validation',
 				{
-					suggestion: 'Check wallet private key and signing implementation'
-				}
+					suggestion: 'Check wallet private key and signing implementation',
+				},
 			);
 		}
 
@@ -152,13 +148,9 @@ export function toDataItemSigner(signer: SignerType) {
 
 export function toANS104Request(fields: DataItemFields): { headers: Record<string, string>; item: any } {
 	if (!fields) {
-		throw new ValidationError(
-			ErrorCode.VALIDATION_MISSING_FIELDS,
-			'Fields object is required for ANS-104 request',
-			{
-				suggestion: 'Provide an object with request fields (data, target, etc.)'
-			}
-		);
+		throw new ValidationError(ErrorCode.VALIDATION_MISSING_FIELDS, 'Fields object is required for ANS-104 request', {
+			suggestion: 'Provide an object with request fields (data, target, etc.)',
+		});
 	}
 
 	const { target = '', anchor = '', data = '', Type, Variant, ...rest } = fields;

@@ -1,19 +1,28 @@
 import { httpbis } from 'http-message-signatures';
 import { parseItem, serializeList } from 'structured-headers';
 
+import { CryptographicError, EncodingError, ErrorCode } from './errors.ts';
+import { validateHashInput, validateSignatureData } from './security.ts';
 import {
 	CreateFn,
 	HttpRequest,
 	HttpSignerArgs,
 	POJO,
-	RequestFormatType,
 	SigBaseInput,
 	SigBaseOutput,
 	SignerType,
-} from './types';
-import { debugLog, decodeBase64UrlToBytes, encodeBase64Url, hasNewline, isBytes, isPojo, sha256, toView } from './utils';
-import { EncodingError, CryptographicError, ErrorCode } from './errors';
-import { validateSignatureData, validateHashInput } from './security';
+	SigningFormatType,
+} from './types.ts';
+import {
+	debugLog,
+	decodeBase64UrlToBytes,
+	encodeBase64Url,
+	hasNewline,
+	isBytes,
+	isPojo,
+	sha256,
+	toView,
+} from './utils.ts';
 
 const MAX_HEADER_LENGTH = 4096;
 
@@ -50,15 +59,11 @@ function hbEncodeValue(value: unknown): [string | undefined, string | Uint8Array
 	if (typeof value === 'symbol') {
 		return ['atom', value.description ?? ''];
 	}
-	throw new EncodingError(
-		ErrorCode.ENCODING_UNSUPPORTED_VALUE,
-		`Cannot encode value of type ${typeof value}`,
-		{
-			value: String(value),
-			type: typeof value,
-			suggestion: 'Supported types: string, Uint8Array, number, array, symbol'
-		}
-	);
+	throw new EncodingError(ErrorCode.ENCODING_UNSUPPORTED_VALUE, `Cannot encode value of type ${typeof value}`, {
+		value: String(value),
+		type: typeof value,
+		suggestion: 'Supported types: string, Uint8Array, number, array, symbol',
+	});
 }
 
 /**
@@ -67,16 +72,16 @@ function hbEncodeValue(value: unknown): [string | undefined, string | Uint8Array
 export function hbEncodeLift(obj: POJO, parent: string = '', top: POJO = {}): POJO {
 	const flatObj: POJO = {};
 	const typesObj: POJO = {};
-	
+
 	// Use for...in loop to avoid object spread and reduce overhead
 	for (const key in obj) {
 		if (!obj.hasOwnProperty(key)) continue;
-		
+
 		const val = obj[key];
 		const flatKey = parent ? `${parent}/${key}`.toLowerCase() : key.toLowerCase();
-		
+
 		if (val == null) continue;
-		
+
 		let value = val;
 		if (Array.isArray(value) && value.some(isPojo)) {
 			// Convert array of POJOs to object by index - optimized
@@ -86,12 +91,12 @@ export function hbEncodeLift(obj: POJO, parent: string = '', top: POJO = {}): PO
 			}
 			value = converted;
 		}
-		
+
 		if (isPojo(value)) {
-			hbEncodeLift(value, flatKey, top);
+			hbEncodeLift(value as any, flatKey, top);
 			continue;
 		}
-		
+
 		const [type, encoded] = hbEncodeValue(value);
 		if (encoded !== undefined) {
 			const size = typeof encoded === 'string' ? Buffer.byteLength(encoded) : (encoded as Uint8Array).byteLength;
@@ -182,7 +187,9 @@ export function toHttpSigner(signer: SignerType) {
 			const signatureBaseList = httpbis.createSignatureBase({ fields }, request);
 
 			// Serialize “@signature-params” and append it
-			const signatureInput = serializeList([[signatureBaseList.map(([item]) => parseItem(item)), signingParameters]]);
+			const signatureInput = serializeList([
+				[signatureBaseList.map(([item]: any) => parseItem(item)), signingParameters],
+			]);
 			signatureBaseList.push(['"@signature-params"', [signatureInput]]);
 
 			// Turn it into the wire‐format string
@@ -197,15 +204,15 @@ export function toHttpSigner(signer: SignerType) {
 		};
 
 		// Ask the low‐level signer to sign our bytes
-		const { signature, address } = await signer(create, RequestFormatType.HTTP_SIG);
+		const { signature, address } = await signer(create, SigningFormatType.HTTP_SIG);
 
 		if (!createCalled) {
 			throw new CryptographicError(
 				ErrorCode.CRYPTO_CREATE_NOT_INVOKED,
 				'Signer did not invoke create() function for HTTP signature',
 				{
-					suggestion: 'Check signer implementation - create() must be called to generate signature base'
-				}
+					suggestion: 'Check signer implementation - create() must be called to generate signature base',
+				},
 			);
 		}
 		if (!signature) {
@@ -214,8 +221,8 @@ export function toHttpSigner(signer: SignerType) {
 				'Signer result missing required signature property for HTTP signature',
 				{
 					returned: Object.keys({ signature, address }),
-					suggestion: 'HTTP signer must return signature and address properties'
-				}
+					suggestion: 'HTTP signer must return signature and address properties',
+				},
 			);
 		}
 
@@ -262,7 +269,7 @@ export async function toHBRequest(obj: POJO = {}): Promise<{ headers: Headers; b
 			}
 			const valStr = String(value);
 			const needsBody =
-				(await hasNewline(value)) || key.includes('/') || Buffer.byteLength(valStr) > MAX_HEADER_LENGTH;
+				(await hasNewline(value as any)) || key.includes('/') || Buffer.byteLength(valStr) > MAX_HEADER_LENGTH;
 			if (needsBody) {
 				bodyKeys.push(key);
 				flattened[key] = new Blob([`content-disposition: form-data; name="${key}"\r\n\r\n`, valStr]);
@@ -289,8 +296,8 @@ export async function toHBRequest(obj: POJO = {}): Promise<{ headers: Headers; b
 			const partsBuffers = await Promise.all(bodyKeys.map((k) => (flattened[k] as Blob).arrayBuffer()));
 			const base = new Blob(partsBuffers.flatMap((buf, i) => (i < partsBuffers.length - 1 ? [buf, '\r\n'] : [buf])));
 			const baseBuffer = await base.arrayBuffer();
-	validateHashInput(baseBuffer, 'multipart boundary data');
-	const hash = await sha256(baseBuffer);
+			validateHashInput(baseBuffer, 'multipart boundary data');
+			const hash = await sha256(baseBuffer);
 			const boundary = encodeBase64Url(hash);
 
 			const sections: (string | ArrayBuffer)[] = [];
@@ -304,7 +311,7 @@ export async function toHBRequest(obj: POJO = {}): Promise<{ headers: Headers; b
 		}
 		const finalBuf = await (body as Blob).arrayBuffer();
 		validateHashInput(finalBuf, 'content digest data');
-	const cdHash = await sha256(finalBuf);
+		const cdHash = await sha256(finalBuf);
 		const cdB64 = encodeBase64Url(cdHash);
 		headers.append('Content-Digest', `sha-256=:${cdB64}:`);
 	}
