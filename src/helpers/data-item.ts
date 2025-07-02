@@ -28,6 +28,9 @@ export function createDataItemBytes(data: any, signer: any, opts: any) {
 }
 
 export async function getRawAndId(dataItemBytes: Uint8Array) {
+	// Validate input data
+	validateHashInput(dataItemBytes, 'data item bytes');
+	
 	const dataItem = new DataItem(dataItemBytes);
 
 	/**
@@ -36,6 +39,7 @@ export async function getRawAndId(dataItemBytes: Uint8Array) {
 	 * on node and browser
 	 */
 	const rawSignature = dataItem.rawSignature;
+	validateHashInput(rawSignature, 'signature for ID calculation');
 	const rawId = await crypto.subtle.digest('SHA-256', rawSignature);
 
 	return {
@@ -120,6 +124,9 @@ export function toDataItemSigner(signer: SignerType) {
 		const signedBytes = new Uint8Array(unsignedBytes!);
 		signedBytes.set(Buffer.isBuffer(rawSig) ? new Uint8Array(rawSig) : rawSig, 2);
 
+		// Validate signature data before verification
+		validateSignatureData(rawSig, 'data item signature');
+		
 		// Verify it before returning
 		const isValid = await verify(signedBytes);
 		if (!isValid) {
@@ -134,6 +141,7 @@ export function toDataItemSigner(signer: SignerType) {
 
 		// Compute the DataItem ID = base64url( SHA-256(rawSig) )
 		const rawSigBytes = Buffer.isBuffer(rawSig) ? new Uint8Array(rawSig) : rawSig;
+		validateHashInput(rawSigBytes, 'signature data for ID generation');
 		const hashBuffer = await crypto.subtle.digest('SHA-256', rawSigBytes);
 		const id = encodeBase64Url(hashBuffer);
 

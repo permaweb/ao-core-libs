@@ -55,7 +55,7 @@ export function request(deps: DependenciesType) {
 							ErrorCode.REQUEST_PREPARATION_FAILED,
 							'Error preparing HTTP-SIG request',
 							{ 
-								signingFormat: format,
+								signingFormat,
 								suggestion: 'Check signer configuration and request parameters' 
 							}
 						);
@@ -65,7 +65,7 @@ export function request(deps: DependenciesType) {
 			throw new RequestError(
 				ErrorCode.REQUEST_FORMATTING_FAILED,
 				'Failed to format request for signing',
-				{ signingFormat: format, path: args.path },
+				{ signingFormat, path: args.path },
 				e instanceof Error ? e : undefined
 			);
 		}

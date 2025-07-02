@@ -13,6 +13,7 @@ import {
 } from './types';
 import { debugLog, decodeBase64UrlToBytes, encodeBase64Url, hasNewline, isBytes, isPojo, sha256, toView } from './utils';
 import { EncodingError, CryptographicError, ErrorCode } from './errors';
+import { validateSignatureData, validateHashInput } from './security';
 
 const MAX_HEADER_LENGTH = 4096;
 
@@ -207,8 +208,9 @@ export function toHttpSigner(signer: SignerType) {
 			);
 		}
 
-		// Splice the signature into headers
+		// Validate and process the signature
 		const rawSig = toView(signature);
+		validateSignatureData(rawSig, 'HTTP signature');
 		const sigB64 = encodeBase64Url(rawSig);
 		const sigBuffer = Buffer.from(sigB64, 'base64url');
 		const signedHeaders = httpbis.augmentHeaders(
@@ -275,7 +277,9 @@ export async function toHBRequest(obj: POJO = {}): Promise<{ headers: Headers; b
 			// Multipart
 			const partsBuffers = await Promise.all(bodyKeys.map((k) => (flattened[k] as Blob).arrayBuffer()));
 			const base = new Blob(partsBuffers.flatMap((buf, i) => (i < partsBuffers.length - 1 ? [buf, '\r\n'] : [buf])));
-			const hash = await sha256(await base.arrayBuffer());
+			const baseBuffer = await base.arrayBuffer();
+	validateHashInput(baseBuffer, 'multipart boundary data');
+	const hash = await sha256(baseBuffer);
 			const boundary = encodeBase64Url(hash);
 
 			const sections: (string | ArrayBuffer)[] = [];
@@ -288,7 +292,8 @@ export async function toHBRequest(obj: POJO = {}): Promise<{ headers: Headers; b
 			body = new Blob(sections);
 		}
 		const finalBuf = await (body as Blob).arrayBuffer();
-		const cdHash = await sha256(finalBuf);
+		validateHashInput(finalBuf, 'content digest data');
+	const cdHash = await sha256(finalBuf);
 		const cdB64 = encodeBase64Url(cdHash);
 		headers.append('Content-Digest', `sha-256=:${cdB64}:`);
 	}

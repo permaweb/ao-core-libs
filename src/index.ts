@@ -2,6 +2,7 @@ import { request } from './services/core';
 import { createSigner } from './helpers/signer';
 import { DependenciesType } from './helpers/types';
 import { ValidationError, ErrorCode } from './helpers/errors';
+import { validateJWK } from './helpers/security';
 
 const DEFAULT_URL = 'https://forward.computer';
 
@@ -33,6 +34,11 @@ export function validateDependencies(deps: DependenciesType): void {
 				suggestion: 'Add jwk property with your Arweave wallet or signer property with custom signer'
 			}
 		);
+	}
+	
+	// Validate JWK if provided (createSigner will also validate, but we want early validation)
+	if (deps.jwk) {
+		validateJWK(deps.jwk);
 	}
 }
 
