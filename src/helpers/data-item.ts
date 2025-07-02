@@ -2,10 +2,21 @@ import { createData, DataItem, SIG_CONFIG } from '@dha-team/arbundles';
 
 import { ANS104RequestResult, CreateInput, DataItemFields, DataItemOptions, DataItemSigner, RequestFormatType, SignedDataItemResult, SignerType } from './types';
 import { debugLog, encodeBase64Url, toView } from './utils';
+import { CryptographicError, ValidationError, ErrorCode } from './errors';
 
 export function createDataItemBytes(data: any, signer: any, opts: any) {
 	const signerMeta = (SIG_CONFIG as any)[signer.type];
-	if (!signerMeta) throw new Error(`Metadata for signature type ${signer.type} not found`);
+	if (!signerMeta) {
+		throw new CryptographicError(
+			ErrorCode.CRYPTO_SIGNATURE_METADATA_NOT_FOUND,
+			`No metadata found for signature type ${signer.type}`,
+			{
+				signerType: signer.type,
+				availableTypes: Object.keys(SIG_CONFIG),
+				suggestion: 'Verify signer type is supported by arbundles library'
+			}
+		);
+	}
 
 	signerMeta.signatureType = signer.type;
 	signerMeta.ownerLength = signerMeta.pubLength;
@@ -78,7 +89,13 @@ export function toDataItemSigner(signer: SignerType) {
 
 		// Make sure create() actually ran
 		if (!createCalled) {
-			throw new Error('create() must be invoked to construct the data to sign');
+			throw new CryptographicError(
+				ErrorCode.CRYPTO_CREATE_NOT_INVOKED,
+				'Signer did not invoke create() function',
+				{
+					suggestion: 'Check signer implementation - create() must be called to generate signature data'
+				}
+			);
 		}
 
 		// If the signer already returned a full DataItem, just pass it through
@@ -88,7 +105,14 @@ export function toDataItemSigner(signer: SignerType) {
 
 		// Otherwise, expect a signature blob
 		if (!res.signature) {
-			throw new Error('signer must return a `signature` property');
+			throw new CryptographicError(
+				ErrorCode.CRYPTO_MISSING_SIGNATURE,
+				'Signer result missing required signature property',
+				{
+					returned: Object.keys(res || {}),
+					suggestion: 'Signer must return an object with signature property'
+				}
+			);
 		}
 		const rawSig = toView(res.signature);
 
@@ -99,7 +123,13 @@ export function toDataItemSigner(signer: SignerType) {
 		// Verify it before returning
 		const isValid = await verify(signedBytes);
 		if (!isValid) {
-			throw new Error('Data Item signature is not valid');
+			throw new CryptographicError(
+				ErrorCode.CRYPTO_INVALID_SIGNATURE,
+				'Generated data item signature failed validation',
+				{
+					suggestion: 'Check wallet private key and signing implementation'
+				}
+			);
 		}
 
 		// Compute the DataItem ID = base64url( SHA-256(rawSig) )
@@ -112,7 +142,15 @@ export function toDataItemSigner(signer: SignerType) {
 }
 
 export function toANS104Request(fields: DataItemFields): { headers: Record<string, string>; item: any } {
-	if (!fields) throw new Error('Expected Fields');
+	if (!fields) {
+		throw new ValidationError(
+			ErrorCode.VALIDATION_MISSING_FIELDS,
+			'Fields object is required for ANS-104 request',
+			{
+				suggestion: 'Provide an object with request fields (data, target, etc.)'
+			}
+		);
+	}
 
 	const { target = '', anchor = '', data = '', Type, Variant, ...rest } = fields;
 

@@ -7,6 +7,7 @@ try {
 } catch {}
 
 import { DebugLogType, DependenciesType, POJO, RequestType } from './types';
+import { EncodingError, ErrorCode } from './errors';
 
 const raw = process.env.DEBUG ?? '';
 const enabled = new Set(raw.split(',').map((s) => s.trim()));
@@ -73,7 +74,14 @@ export function decodeBase64UrlToBytes(b64url: string): Uint8Array {
 			: hasNodeBuffer
 				? NodeBuffer.from(b64, 'base64').toString('binary')
 				: (() => {
-						throw new Error('No base64 decoder!');
+						throw new EncodingError(
+							ErrorCode.ENCODING_NO_DECODER,
+							'No base64 decoder available in this environment',
+							{
+								environment: typeof window !== 'undefined' ? 'browser' : 'node',
+								suggestion: 'Ensure Buffer is available or use a base64 polyfill'
+							}
+						);
 					})();
 	// 4. Map to bytes
 	const bytes = new Uint8Array(bin.length);
@@ -100,7 +108,15 @@ export function toView(value: string | ArrayBufferView | Buffer): Uint8Array {
 		return decodeBase64UrlToBytes(value);
 	}
 
-	throw new Error('Unexpected type in toView(); expected string, Buffer, or Uint8Array');
+	throw new EncodingError(
+		ErrorCode.ENCODING_UNSUPPORTED_INPUT_TYPE,
+		'Unsupported input type for toView conversion',
+		{
+			provided: typeof value,
+			supportedTypes: ['string', 'Buffer', 'Uint8Array', 'ArrayBufferView'],
+			suggestion: 'Convert input to string (base64url) or byte array format'
+		}
+	);
 }
 
 /** Helper to detect byte arrays */

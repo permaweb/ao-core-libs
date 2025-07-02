@@ -12,6 +12,7 @@ import {
 	SignerType,
 } from './types';
 import { debugLog, decodeBase64UrlToBytes, encodeBase64Url, hasNewline, isBytes, isPojo, sha256, toView } from './utils';
+import { EncodingError, CryptographicError, ErrorCode } from './errors';
 
 const MAX_HEADER_LENGTH = 4096;
 
@@ -48,7 +49,15 @@ function hbEncodeValue(value: unknown): [string | undefined, string | Uint8Array
 	if (typeof value === 'symbol') {
 		return ['atom', value.description ?? ''];
 	}
-	throw new Error(`Cannot encode value: ${String(value)}`);
+	throw new EncodingError(
+		ErrorCode.ENCODING_UNSUPPORTED_VALUE,
+		`Cannot encode value of type ${typeof value}`,
+		{
+			value: String(value),
+			type: typeof value,
+			suggestion: 'Supported types: string, Uint8Array, number, array, symbol'
+		}
+	);
 }
 
 /**
@@ -179,10 +188,23 @@ export function toHttpSigner(signer: SignerType) {
 		const { signature, address } = await signer(create, RequestFormatType.HTTP_SIG);
 
 		if (!createCalled) {
-			throw new Error('create() must be invoked to construct the data to sign');
+			throw new CryptographicError(
+				ErrorCode.CRYPTO_CREATE_NOT_INVOKED,
+				'Signer did not invoke create() function for HTTP signature',
+				{
+					suggestion: 'Check signer implementation - create() must be called to generate signature base'
+				}
+			);
 		}
 		if (!signature) {
-			throw new Error('signer must return a `signature` property');
+			throw new CryptographicError(
+				ErrorCode.CRYPTO_MISSING_SIGNATURE,
+				'Signer result missing required signature property for HTTP signature',
+				{
+					returned: Object.keys({ signature, address }),
+					suggestion: 'HTTP signer must return signature and address properties'
+				}
+			);
 		}
 
 		// Splice the signature into headers

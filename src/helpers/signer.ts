@@ -1,6 +1,7 @@
 import { constants, createHash, createPrivateKey, createSign } from 'crypto';
 
 import { CreateFn, JWK, RequestFormatType, SignatureResult, SignerOptions, SignerType } from './types';
+import { CryptographicError, ErrorCode } from './errors';
 
 export function createANS104Signer({
 	privateKey,
@@ -71,7 +72,15 @@ export function createSigner(wallet: JWK): SignerType {
 			case RequestFormatType.HTTP_SIG:
 				return httpSigner(create);
 			default:
-				throw new Error(`SignerType kind unknown '${kind}'`);
+				throw new CryptographicError(
+					ErrorCode.CRYPTO_SIGNER_TYPE_UNKNOWN,
+					`Unknown signer type: ${kind}`,
+					{
+						provided: kind,
+						supportedTypes: Object.values(RequestFormatType),
+						suggestion: 'Use ANS-104 or HTTP-SIG signing format'
+					}
+				);
 		}
 	};
 }
