@@ -45,7 +45,7 @@ export function request(deps: DependenciesType) {
 							headers: unsignedRequest.headers,
 						});
 
-						signedRequest = await toHttpSigner(deps.signer)(signingArgs as any);
+						signedRequest = await toHttpSigner(deps.signer!)(signingArgs);
 
 						httpRequest = { ...signedRequest };
 
@@ -54,8 +54,9 @@ export function request(deps: DependenciesType) {
 						throw new Error('Error preparing request');
 					}
 			}
-		} catch (e: any) {
-			throw new Error(e ?? 'Error formatting request');
+		} catch (e: unknown) {
+			const message = e instanceof Error ? e.message : 'Error formatting request';
+			throw new Error(message);
 		}
 
 		if (!unsignedRequest || !signedRequest || !httpRequest) throw new Error('Error preparing request');
@@ -77,8 +78,9 @@ export function request(deps: DependenciesType) {
 			};
 
 			return response;
-		} catch (e: any) {
-			throw new Error(e.message ?? 'Error sending HTTP Request');
+		} catch (e: unknown) {
+			const message = e instanceof Error ? e.message : 'Error sending HTTP Request';
+			throw new Error(message);
 		}
 	};
 }

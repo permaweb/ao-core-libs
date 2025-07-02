@@ -1,6 +1,6 @@
 import { createData, DataItem, SIG_CONFIG } from '@dha-team/arbundles';
 
-import { CreateInput, RequestFormatType } from './types.ts';
+import { ANS104RequestResult, CreateInput, DataItemFields, DataItemOptions, DataItemSigner, RequestFormatType, SignedDataItemResult, SignerType } from './types.ts';
 import { debugLog, encodeBase64Url, toView } from './utils.ts';
 
 export function createDataItemBytes(data: any, signer: any, opts: any) {
@@ -17,7 +17,7 @@ export function createDataItemBytes(data: any, signer: any, opts: any) {
 }
 
 export async function getRawAndId(dataItemBytes: Uint8Array) {
-	const dataItem = new DataItem(dataItemBytes as any);
+	const dataItem = new DataItem(dataItemBytes);
 
 	/**
 	 * arbundles dataItem.id does not work in browser environments
@@ -34,17 +34,17 @@ export async function getRawAndId(dataItemBytes: Uint8Array) {
 }
 
 export function getSignatureData(dataItemBytes: Uint8Array) {
-	const dataItem = new DataItem(dataItemBytes as any);
+	const dataItem = new DataItem(dataItemBytes);
 	return dataItem.getSignatureData();
 }
 
 export function verify(dataItemBytes: Uint8Array) {
-	return DataItem.verify(dataItemBytes as any);
+	return DataItem.verify(dataItemBytes);
 }
 
-export function toDataItemSigner(signer: any) {
-	return async function ({ data, tags, target, anchor }: any) {
-		let unsignedBytes: any = null;
+export function toDataItemSigner(signer: SignerType) {
+	return async function ({ data, tags, target, anchor }: DataItemFields) {
+		let unsignedBytes: Uint8Array | null = null;
 		let createCalled = false;
 
 		// This function will be called by the signer to build
@@ -93,8 +93,8 @@ export function toDataItemSigner(signer: any) {
 		const rawSig = toView(res.signature);
 
 		// Splice the raw signature into the unsigned bytes
-		const signedBytes = new Uint8Array(unsignedBytes);
-		signedBytes.set(rawSig as any, 2);
+		const signedBytes = new Uint8Array(unsignedBytes!);
+		signedBytes.set(Buffer.isBuffer(rawSig) ? new Uint8Array(rawSig) : rawSig, 2);
 
 		// Verify it before returning
 		const isValid = await verify(signedBytes);
@@ -103,14 +103,15 @@ export function toDataItemSigner(signer: any) {
 		}
 
 		// Compute the DataItem ID = base64url( SHA-256(rawSig) )
-		const hashBuffer = await crypto.subtle.digest('SHA-256', rawSig as any);
+		const rawSigBytes = Buffer.isBuffer(rawSig) ? new Uint8Array(rawSig) : rawSig;
+		const hashBuffer = await crypto.subtle.digest('SHA-256', rawSigBytes);
 		const id = encodeBase64Url(hashBuffer);
 
 		return { id, raw: signedBytes };
 	};
 }
 
-export function toANS104Request(fields: any) {
+export function toANS104Request(fields: DataItemFields): { headers: Record<string, string>; item: any } {
 	if (!fields) throw new Error('Expected Fields');
 
 	const { target = '', anchor = '', data = '', Type, Variant, ...rest } = fields;

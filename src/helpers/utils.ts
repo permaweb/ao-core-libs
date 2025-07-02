@@ -42,7 +42,7 @@ export function buildPath(args: { process?: string; device?: string; path: strin
 	return result;
 }
 
-export function joinURL(args: { url: any; path: any }) {
+export function joinURL(args: { url: string; path: string }) {
 	if (!args.path) return args.url;
 	if (args.path.startsWith('/')) return joinURL({ url: args.url, path: args.path.slice(1) });
 	args.url = new URL(args.url);
@@ -87,7 +87,11 @@ export function decodeBase64UrlToBytes(b64url: string): Uint8Array {
  * Convert a base64url‐encoded *string* or a Uint8Array/ArrayBufferView
  * into a Uint8Array of raw bytes.
  */
-export function toView(value: string | ArrayBufferView): Uint8Array {
+export function toView(value: string | ArrayBufferView | Buffer): Uint8Array {
+	if (Buffer.isBuffer(value)) {
+		return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+	}
+	
 	if (ArrayBuffer.isView(value)) {
 		return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
 	}
@@ -96,12 +100,12 @@ export function toView(value: string | ArrayBufferView): Uint8Array {
 		return decodeBase64UrlToBytes(value);
 	}
 
-	throw new Error('Unexpected type in toView(); expected string or Uint8Array');
+	throw new Error('Unexpected type in toView(); expected string, Buffer, or Uint8Array');
 }
 
 /** Helper to detect byte arrays */
-export function isBytes(value: unknown): value is ArrayBufferView | ArrayBuffer {
-	return value instanceof ArrayBuffer || ArrayBuffer.isView(value);
+export function isBytes(value: unknown): value is ArrayBufferView | ArrayBuffer | Buffer {
+	return value instanceof ArrayBuffer || ArrayBuffer.isView(value) || Buffer.isBuffer(value);
 }
 
 /** Helper to detect plain objects */

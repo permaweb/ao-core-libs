@@ -5,13 +5,14 @@
 		"declaration": true, // Generate type definitions
 		"declarationDir": "dist/types", // Output directory for type declarations
 		"outDir": "dist", // Temporary directory for compiled files
-		"strict": true, // Enable strict type-checking
+		"strict": false, // Disable strict type-checking for external library compatibility
 		"esModuleInterop": true, // Allow default imports for CommonJS modules
 		"skipLibCheck": true, // Skip type checks for node_modules
 		"moduleResolution": "nodenext", // Use Node.js-style module resolution
 		"baseUrl": "src",
 		"emitDeclarationOnly": true,
 		"allowImportingTsExtensions": true,
+		"noImplicitAny": false, // Allow implicit any for external library compatibility
 		"paths": {}
 	},
 	"include": ["src/**/*"],

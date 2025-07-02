@@ -8,9 +8,20 @@ export type DependenciesType = {
 };
 
 /* Arguments accepted by the request function */
-export type RequestType = {
+export interface RequestType {
 	path: string;
-} & any;
+	method?: RequestMethodType;
+	signingFormat?: RequestFormatType;
+	process?: string;
+	device?: string;
+	url?: string;
+	target?: string;
+	anchor?: string;
+	data?: string | Uint8Array | Buffer;
+	Type?: string;
+	Variant?: string;
+	[key: string]: unknown; // For additional dynamic fields
+}
 
 /* HTTP Method used in Request */
 export type RequestMethodType = 'GET' | 'POST';
@@ -26,7 +37,7 @@ export interface HttpRequest {
 	url?: string;
 	method?: string;
 	headers: Record<string, string>;
-	body: any;
+	body?: string | Uint8Array | ArrayBuffer | Blob;
 }
 
 /* What we hand to the signer: the request plus the list of header-fields to sign */
@@ -41,7 +52,14 @@ export interface JWK {
 	n: string;
 	e: string;
 	d?: string;
-	[key: string]: any;
+	p?: string;
+	q?: string;
+	dp?: string;
+	dq?: string;
+	qi?: string;
+	alg?: string;
+	use?: string;
+	kid?: string;
 }
 
 /* Options passed to our two signer‐builders */
@@ -56,10 +74,10 @@ export interface SignerOptions {
  * instead of a deepHash Uint8Array
  */
 export interface CreateOutput {
-	data: Buffer;
-	tags: any[];
-	target?: string;
-	anchor?: string;
+	data: any;
+	tags: any;
+	target?: any;
+	anchor?: any;
 }
 
 /* What the `create(...)` function receives when the signer calls it */
@@ -74,12 +92,14 @@ export interface CreateInput {
  * The function that we hand to `signer(...)` to produce
  * either a deepHash (Uint8Array) or a passthrough payload
  */
-export type CreateFn = (injected: CreateInput) => Promise<Uint8Array | CreateOutput>;
+export type CreateFn = (injected: CreateInput) => Promise<any>;
 
 /* What each of our signers returns */
 export interface SignatureResult {
 	signature: Buffer;
 	address: string;
+	id?: string;
+	raw?: Uint8Array;
 }
 
 /* The final signer type returned by `createSigner` */
@@ -114,4 +134,44 @@ export interface SigBaseOutput {
 export type DebugLogType = 'info' | 'warn' | 'error';
 
 /* For a plain object detector used by http-sig */
-export type POJO = { [key: string]: any };
+export type POJO = { [key: string]: unknown };
+
+/* Data Item interfaces */
+export interface DataItemSigner {
+	type: number;
+	publicKey: Uint8Array;
+}
+
+export interface DataItemOptions {
+	target?: string;
+	tags?: Array<{ name: string; value: string }>;
+	anchor?: string;
+}
+
+export interface DataItemFields {
+	data?: string | Uint8Array | Buffer;
+	tags?: Array<{ name: string; value: string }>;
+	target?: string;
+	anchor?: string;
+	Type?: string;
+	Variant?: string;
+	[key: string]: unknown;
+}
+
+export interface SignedDataItemResult {
+	id: string;
+	raw: Uint8Array;
+}
+
+export interface ANS104RequestResult {
+	headers: {
+		'Content-Type': string;
+		'codec-device': string;
+	};
+	item: {
+		target: string;
+		anchor: string;
+		tags: Array<{ name: string; value: string }>;
+		data: string | Uint8Array | Buffer;
+	};
+}

@@ -155,10 +155,10 @@ export function toHttpSigner(signer: SignerType) {
 					keyid: encodeBase64Url(publicKey),
 					alg,
 				},
-			} as any);
+			});
 
 			// Build the (field → value) list
-			const signatureBaseList = httpbis.createSignatureBase({ fields }, request as any);
+			const signatureBaseList = httpbis.createSignatureBase({ fields }, request);
 
 			// Serialize “@signature-params” and append it
 			const signatureInput = serializeList([[signatureBaseList.map(([item]) => parseItem(item)), signingParameters]]);
@@ -199,7 +199,7 @@ export function toHttpSigner(signer: SignerType) {
 		// Return the signed request
 		return {
 			...request,
-			headers: signedHeaders as any,
+			headers: signedHeaders as Record<string, string>,
 		};
 	};
 }
@@ -227,7 +227,7 @@ export async function toHBRequest(obj: POJO = {}): Promise<{ headers: Headers; b
 			}
 			const valStr = String(value);
 			const needsBody =
-				(await hasNewline(value as any)) || key.includes('/') || Buffer.byteLength(valStr) > MAX_HEADER_LENGTH;
+				(await hasNewline(value)) || key.includes('/') || Buffer.byteLength(valStr) > MAX_HEADER_LENGTH;
 			if (needsBody) {
 				bodyKeys.push(key);
 				flattened[key] = new Blob([`content-disposition: form-data; name="${key}"\r\n\r\n`, valStr]);
