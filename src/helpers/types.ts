@@ -16,9 +16,9 @@ export type RequestType = {
 export type RequestMethodType = 'GET' | 'POST';
 
 /* Signing Formats */
-export enum RequestFormatType {
-	ANS_104 = 'ANS-104',
-	HTTP_SIG = 'HTTP-SIG',
+export enum SigningFormatType {
+	ANS_104 = 'ans104',
+	HTTP_SIG = 'httpsig',
 }
 
 /* Minimal Request shape for HTTP signing */
@@ -83,7 +83,7 @@ export interface SignatureResult {
 }
 
 /* The final signer type returned by `createSigner` */
-export type SignerType = (create: CreateFn, kind: RequestFormatType) => Promise<SignatureResult>;
+export type SignerType = (create: CreateFn, kind: SigningFormatType) => Promise<SignatureResult>;
 
 /*
  * What you pass in to build the signature base.

@@ -1,6 +1,6 @@
 import { createData, DataItem, SIG_CONFIG } from '@dha-team/arbundles';
 
-import { CreateInput, RequestFormatType } from './types.ts';
+import { CreateInput, SigningFormatType } from './types.ts';
 import { debugLog, encodeBase64Url, toView } from './utils.ts';
 
 export function createDataItemBytes(data: any, signer: any, opts: any) {
@@ -72,7 +72,7 @@ export function toDataItemSigner(signer: any) {
 		}
 
 		// Ask the signer to sign our payload
-		const res = await signer(create, RequestFormatType.ANS_104);
+		const res = await signer(create, SigningFormatType.ANS_104);
 
 		debugLog('info', 'Signed Result', res);
 

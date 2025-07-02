@@ -6,7 +6,7 @@ import {
 	HttpRequest,
 	HttpSignerArgs,
 	POJO,
-	RequestFormatType,
+	SigningFormatType,
 	SigBaseInput,
 	SigBaseOutput,
 	SignerType,
@@ -176,7 +176,7 @@ export function toHttpSigner(signer: SignerType) {
 		};
 
 		// Ask the low‐level signer to sign our bytes
-		const { signature, address } = await signer(create, RequestFormatType.HTTP_SIG);
+		const { signature, address } = await signer(create, SigningFormatType.HTTP_SIG);
 
 		if (!createCalled) {
 			throw new Error('create() must be invoked to construct the data to sign');

@@ -1,4 +1,4 @@
-import AOCore from '@permaweb/ao-core-libs';
+import AOCore, { createSigner } from '@permaweb/ao-core-libs';
 import fs from 'fs';
 
 function expect(actual) {
@@ -86,12 +86,16 @@ function logError(message) {
 
 (async function () {
 	const jwk = JSON.parse(fs.readFileSync(process.env.PATH_TO_WALLET));
-	const aoCore = AOCore.init({ jwk });
+	
+	// const aoCore = AOCore.init({ jwk });
+	const aoCore = AOCore.init({ signer: createSigner(jwk) });
+	
+	console.log(aoCore);
 
 	const postAns104 = await aoCore.request({
 		path: 'JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
 		method: 'POST',
-		signingFormat: 'ANS-104'
+		signingFormat: 'ans104'
 	});
 
 	expect(postAns104).toBeDefined();
@@ -104,7 +108,7 @@ function logError(message) {
 
 	const postHttpSig = await aoCore.request({
 		method: 'POST',
-		signingFormat: 'HTTP-SIG',
+		signingFormat: 'httpsig',
 		path: 'JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
 	});
 

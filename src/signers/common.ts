@@ -1,6 +1,6 @@
 import { constants, createHash, createPrivateKey, createSign } from 'crypto';
 
-import { CreateFn, JWK, RequestFormatType, SignatureResult, SignerOptions, SignerType } from './types.ts';
+import { CreateFn, JWK, SignatureResult, SignerOptions, SignerType,SigningFormatType } from '../helpers/types.ts';
 
 export function createANS104Signer({
 	privateKey,
@@ -8,14 +8,14 @@ export function createANS104Signer({
 	address,
 }: SignerOptions): (create: CreateFn) => Promise<SignatureResult> {
 	return async (create) => {
-		// 1) ask the create‐fn for our deep‐hash
+		// 1) Ask the create‐fn for our deep‐hash
 		const deepHash = await create({
 			type: 1,
 			publicKey,
 			alg: 'rsa-v1_5-sha256',
 		});
 
-		// 2) sign it with RSA-PSS SHA-256
+		// 2) Sign it with RSA-PSS SHA-256
 		const signature = createSign('sha256')
 			.update(deepHash as Uint8Array) // deepHash is Uint8Array here
 			.sign({ key: privateKey, padding: constants.RSA_PKCS1_PSS_PADDING });
@@ -52,23 +52,23 @@ export function createHttpSigner({
  * @returns a SignerType that delegates to ANS-104 or HTTP-SIG based on `kind`
  */
 export function createSigner(wallet: JWK): SignerType {
-	// decode the base64url public modulus
+	// Decode the base64url public modulus
 	const publicKey = Buffer.from(wallet.n, 'base64url');
 
-	// turn the JWK into a Crypto KeyObject
+	// Turn the JWK into a Crypto KeyObject
 	const privateKey = createPrivateKey({ key: wallet, format: 'jwk' });
 
-	// derive the Arweave address = sha256(publicKey) in base64url
+	// Derive the Arweave address = sha256(publicKey) in base64url
 	const address = createHash('sha256').update(publicKey).digest('base64url');
 
 	const dataItemSigner = createANS104Signer({ privateKey, publicKey, address });
 	const httpSigner = createHttpSigner({ privateKey, publicKey, address });
 
-	return (create: CreateFn, kind: RequestFormatType) => {
+	return (create: CreateFn, kind: SigningFormatType) => {
 		switch (kind) {
-			case RequestFormatType.ANS_104:
+			case SigningFormatType.ANS_104:
 				return dataItemSigner(create);
-			case RequestFormatType.HTTP_SIG:
+			case SigningFormatType.HTTP_SIG:
 				return httpSigner(create);
 			default:
 				throw new Error(`SignerType kind unknown '${kind}'`);

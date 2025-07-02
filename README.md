@@ -25,6 +25,8 @@ yarn add @permaweb/ao-core-libs
 
 ## Initialization
 
+The SDK can be initialized with either a JWK or a Signer. If a JWK is provided, then the default AO-Core Signer will be created and used on intilization. If both a JWK and Signer are provided, the Signer will be used.
+
 ```typescript
 import AOCore from '@permaweb/ao-core-libs';
 
@@ -38,27 +40,19 @@ const aoCore = AOCore.init({ jwk });
 
 This SDK exposes a single function, `request`, for communicating with AO Core, which accepts these arguments:
 
-- `url` (optional) – your API endpoint (defaults to https://forward.computer)
-- `method` – HTTP Request Method (`GET` or `POST`)
-- `format` – Signing Format (`ANS-104` or `HTTP-SIG`)
-- `process` (optional) – Arweave process ID to include in the path
-- `device` (optional) – Device identifier (defaults to `process@1.0` if a `process` is passed with no `device`)
-- `path` – The endpoint path under the process (no leading slash)
-- `fields` – A map of key/value pairs that will be serialized and signed
+- `path` – The endpoint path (no leading slash)
+- `method` – (optional - defaults to `GET`) HTTP Request Method (`GET` or `POST`)
+- `signingFormat` – (optional - defaults to `HTTP-SIG`) Signing Format (`ANS-104` or `HTTP-SIG`)
+- *Any additional fields* – All other fields passed in will be included as part of the request payload (e.g. custom headers, tags, or data fields depending on the signing format)
 
 ### Example
 
 ```typescript
 const response = await aoCore.request({
-	url: 'https://forward.computer',
 	method: 'POST',
-	format: 'ANS-104',
-	path: 'router~node-process@1.0/now/routes/serialize~json@1.0',
-	fields: {
-		target: 'uf_FqRvLqjnFMc8ZzGkF4qWKuNmUIQcYP0tPlCGORQk',
-		test: '1234',
-		data: '1234',
-	},
+	signingFormat: 'HTTP-SIG',
+	path: 'JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
+	myCustomField: '1234'
 });
 ```
 

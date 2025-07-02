@@ -1,6 +1,6 @@
 import { toANS104Request, toDataItemSigner } from 'helpers/data-item.ts';
 import { toHBRequest, toHttpSigner, toSigBaseArgs } from 'helpers/http-sig.ts';
-import { DependenciesType, HttpRequest, RequestFormatType, RequestType } from 'helpers/types.ts';
+import { DependenciesType, HttpRequest, RequestType,SigningFormatType } from 'helpers/types.ts';
 import { debugLog, joinURL } from 'helpers/utils.ts';
 
 export function request(deps: DependenciesType) {
@@ -19,13 +19,13 @@ export function request(deps: DependenciesType) {
 		 const { path, method, ...remainingFields } = args;
 
 		const requestMethod = method ?? 'GET';
-		const signingFormat = args.signingFormat ?? RequestFormatType.HTTP_SIG;
+		const signingFormat = args.signingFormat ?? SigningFormatType.HTTP_SIG;
 
 		try {
 			debugLog('info', 'Signing Format:', signingFormat);
 
 			switch (signingFormat) {
-				case RequestFormatType.ANS_104:
+				case SigningFormatType.ANS_104:
 					unsignedRequest = toANS104Request(remainingFields);
 					signedRequest = await toDataItemSigner(deps.signer)(unsignedRequest.item);
 
@@ -35,7 +35,7 @@ export function request(deps: DependenciesType) {
 					}
 
 					break;
-				case RequestFormatType.HTTP_SIG:
+				case SigningFormatType.HTTP_SIG:
 					unsignedRequest = await toHBRequest(remainingFields);
 
 					if (unsignedRequest && deps.signer) {
@@ -83,12 +83,12 @@ export function request(deps: DependenciesType) {
 	};
 }
 
-export function getValidationError(args: RequestType): string | null {
+function getValidationError(args: RequestType): string | null {
 	if (!args) return 'Expected Request Args';
 
 	if (!args.path) return 'Path Expected';
 
-	const validFormats = Object.values(RequestFormatType);
+	const validFormats = Object.values(SigningFormatType);
 	if (args.signingFormat && !validFormats.includes(args.signingFormat)) return 'Invalid Format Provided';
 
 	return null;
