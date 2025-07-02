@@ -4,7 +4,7 @@ This SDK provides a JavaScript interface for communicating with AO-Core.
 
 AO-Core is a protocol and standard for distributed computation that forms the foundation of the AO computer. Inspired by and built upon concepts from the Erlang language, AO-Core embraces the actor model for concurrent, distributed systems. Unlike traditional blockchain systems, AO-Core defines a flexible, powerful computation protocol that enables a wide range of applications beyond just running Lua programs.
 
-For a full breakdown of AO-Core, please see the [documentation](https://hyperbeam.arweave.net/build/introduction/what-is-ao-core.html).
+For a full breakdown of AO-Core, see the [documentation](https://hyperbeam.arweave.net/build/introduction/what-is-ao-core.html).
 
 ## Prerequisites
 
@@ -32,8 +32,15 @@ import AOCore from '@permaweb/ao-core-libs';
 
 // NodeJS Usage
 const jwk = JSON.parse(readFileSync(process.env.PATH_TO_WALLET, 'utf-8'));
-
 const aoCore = AOCore.init({ jwk });
+
+// Or
+import { createSigner } from '@permaweb/ao-core-libs'; // Or your own custom signer
+const aoCore = AOCore.init({ signer: createSigner(jwk) });
+
+// Browser Usage
+import { createSigner } from '@permaweb/ao-core-libs';
+const aoCore = AOCore.init({ signer: createSigner(window.arweaveWallet) });
 ```
 
 ## Usage
@@ -43,7 +50,7 @@ This SDK exposes a single function, `request`, for communicating with AO Core, w
 - `path` – The endpoint path (no leading slash)
 - `method` – (optional - defaults to `GET`) HTTP Request Method (`GET` or `POST`)
 - `signingFormat` – (optional - defaults to `HTTP-SIG`) Signing Format (`ANS-104` or `HTTP-SIG`)
-- *Any additional fields* – All other fields passed in will be included as part of the request payload (e.g. custom headers, tags, or data fields depending on the signing format)
+- _Any additional fields_ – All other fields passed in will be included as part of the request payload (e.g. custom headers, tags, or data fields depending on the signing format)
 
 ### Example
 
@@ -52,7 +59,7 @@ const response = await aoCore.request({
 	method: 'POST',
 	signingFormat: 'HTTP-SIG',
 	path: 'JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
-	myCustomField: '1234'
+	myCustomField: '1234',
 });
 ```
 

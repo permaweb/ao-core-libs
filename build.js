@@ -24,11 +24,11 @@ const sharedConfig = {
 };
 
 const nodeAlias = alias({
-  signers: path.resolve(srcDir, 'signers/common.ts'),
+	signers: path.resolve(srcDir, 'signers/common.ts'),
 });
 
 const browserAlias = alias({
-  signers: path.resolve(srcDir, 'signers/browser.ts'),
+	signers: path.resolve(srcDir, 'signers/browser.ts'),
 });
 
 const nodeCjsConfig = {
@@ -46,7 +46,7 @@ const nodeCjsConfig = {
 const nodeEsmConfig = {
 	...nodeCjsConfig,
 	format: 'esm',
-	outfile: path.resolve(distDir, 'index.js')
+	outfile: path.resolve(distDir, 'index.js'),
 };
 
 const browserConfig = {
@@ -60,15 +60,15 @@ const browserConfig = {
 				crypto: true,
 				constants: true,
 				events: true,
-				stream: true
-			}
+				stream: true,
+			},
 		}),
 		alias({
 			crypto: require.resolve('crypto-browserify'),
 			constants: require.resolve('constants-browserify'),
 			stream: require.resolve('stream-browserify'),
 			process: require.resolve('process/browser'),
-		})
+		}),
 	],
 	bundle: true,
 	minify: true,

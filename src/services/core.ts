@@ -1,6 +1,6 @@
 import { toANS104Request, toDataItemSigner } from 'helpers/data-item.ts';
 import { toHBRequest, toHttpSigner, toSigBaseArgs } from 'helpers/http-sig.ts';
-import { DependenciesType, HttpRequest, RequestType,SigningFormatType } from 'helpers/types.ts';
+import { DependenciesType, HttpRequest, RequestType, SigningFormatType } from 'helpers/types.ts';
 import { debugLog, joinURL } from 'helpers/utils.ts';
 
 export function request(deps: DependenciesType) {
@@ -16,7 +16,7 @@ export function request(deps: DependenciesType) {
 		let signedRequest = null;
 		let httpRequest: HttpRequest | null = null;
 
-		 const { path, method, ...remainingFields } = args;
+		const { path, method, ...remainingFields } = args;
 
 		const requestMethod = method ?? 'GET';
 		const signingFormat = args.signingFormat ?? SigningFormatType.HTTP_SIG;
@@ -31,8 +31,8 @@ export function request(deps: DependenciesType) {
 
 					httpRequest = {
 						headers: unsignedRequest.headers,
-						body: signedRequest.raw
-					}
+						body: signedRequest.raw,
+					};
 
 					break;
 				case SigningFormatType.HTTP_SIG:
@@ -59,7 +59,7 @@ export function request(deps: DependenciesType) {
 		}
 
 		if (!unsignedRequest || !signedRequest || !httpRequest) throw new Error('Error preparing request');
-		
+
 		debugLog('info', 'Signed Request', signedRequest);
 		debugLog('info', 'HTTP Request', httpRequest);
 
@@ -72,9 +72,9 @@ export function request(deps: DependenciesType) {
 			});
 
 			if (!response.ok) {
-				debugLog('error', 'HTTP Response:', response)
+				debugLog('error', 'HTTP Response:', response);
 				debugLog('error', 'HTTP Response Body:', await response.text());
-			};
+			}
 
 			return response;
 		} catch (e: any) {

@@ -6,12 +6,21 @@ import {
 	HttpRequest,
 	HttpSignerArgs,
 	POJO,
-	SigningFormatType,
 	SigBaseInput,
 	SigBaseOutput,
 	SignerType,
+	SigningFormatType,
 } from './types.ts';
-import { debugLog, decodeBase64UrlToBytes, encodeBase64Url, hasNewline, isBytes, isPojo, sha256, toView } from './utils.ts';
+import {
+	debugLog,
+	decodeBase64UrlToBytes,
+	encodeBase64Url,
+	hasNewline,
+	isBytes,
+	isPojo,
+	sha256,
+	toView,
+} from './utils.ts';
 
 const MAX_HEADER_LENGTH = 4096;
 
