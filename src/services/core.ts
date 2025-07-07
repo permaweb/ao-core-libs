@@ -42,7 +42,6 @@ export function request(deps: DependenciesType) {
 					unsignedRequest = await toHBRequest(remainingFields);
 
 					if (unsignedRequest && deps.signer) {
-						console.log('H3');
 						const signingArgs = toSigBaseArgs({
 							url: requestURL,
 							method: requestMethod,
