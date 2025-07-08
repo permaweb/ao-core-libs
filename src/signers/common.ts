@@ -1,8 +1,8 @@
 import { constants, createHash, createPrivateKey, createSign } from 'crypto';
 
 import { CryptographicError, ErrorCode } from '../helpers/errors.ts';
-import { constantTimeEquals,cryptoRateLimiter, validateJWK, validateSignatureData } from '../helpers/security.ts';
-import { CreateFn, JWK, SignatureResult, SignerOptions, SignerType,SigningFormatType } from '../helpers/types.ts';
+import { cryptoRateLimiter, validateJWK, validateSignatureData } from '../helpers/security.ts';
+import { CreateFn, JWK, SignatureResult, SignerOptions, SignerType, SigningFormatType } from '../helpers/types.ts';
 
 export function createANS104Signer({
 	privateKey,
@@ -19,18 +19,16 @@ export function createANS104Signer({
 
 		// Validate the data to be signed
 		if (!(deepHash instanceof Uint8Array)) {
-			throw new CryptographicError(
-				ErrorCode.CRYPTO_INVALID_SIGNATURE,
-				'Invalid data format for ANS-104 signing',
-				{ suggestion: 'Deep hash must be Uint8Array' }
-			);
+			throw new CryptographicError(ErrorCode.CRYPTO_INVALID_SIGNATURE, 'Invalid data format for ANS-104 signing', {
+				suggestion: 'Deep hash must be Uint8Array',
+			});
 		}
-		
+
 		// 2) sign it with RSA-PSS SHA-256
 		const signature = createSign('sha256')
 			.update(deepHash)
 			.sign({ key: privateKey, padding: constants.RSA_PKCS1_PSS_PADDING });
-		
+
 		// Validate the signature was created properly
 		validateSignatureData(signature, 'ANS-104 signature');
 
@@ -53,18 +51,16 @@ export function createHttpSigner({
 
 		// Validate the signature base
 		if (!(signatureBase instanceof Uint8Array)) {
-			throw new CryptographicError(
-				ErrorCode.CRYPTO_INVALID_SIGNATURE,
-				'Invalid data format for HTTP signature',
-				{ suggestion: 'Signature base must be Uint8Array' }
-			);
+			throw new CryptographicError(ErrorCode.CRYPTO_INVALID_SIGNATURE, 'Invalid data format for HTTP signature', {
+				suggestion: 'Signature base must be Uint8Array',
+			});
 		}
-		
+
 		// 2) sign with RSA-PSS SHA-512
 		const signature = createSign('sha512')
 			.update(signatureBase)
 			.sign({ key: privateKey, padding: constants.RSA_PKCS1_PSS_PADDING });
-		
+
 		// Validate the signature was created properly
 		validateSignatureData(signature, 'HTTP signature');
 
@@ -80,12 +76,12 @@ export function createHttpSigner({
 export function createSigner(wallet: JWK): SignerType {
 	// Validate JWK security properties
 	validateJWK(wallet);
-	
+
 	// Apply rate limiting to prevent abuse
 	const walletId = createHash('sha256').update(wallet.n).digest('hex');
 	cryptoRateLimiter.checkLimit(`signer-${walletId}`);
-	
-	// decode the base64url public modulus
+
+	// Decode the base64url public modulus
 	const publicKey = Buffer.from(wallet.n, 'base64url');
 
 	// Turn the JWK into a Crypto KeyObject
@@ -104,15 +100,11 @@ export function createSigner(wallet: JWK): SignerType {
 			case SigningFormatType.HTTP_SIG:
 				return httpSigner(create);
 			default:
-				throw new CryptographicError(
-					ErrorCode.CRYPTO_SIGNER_TYPE_UNKNOWN,
-					`Unknown signer type: ${kind}`,
-					{
-						provided: kind,
-						supportedTypes: Object.values(SigningFormatType),
-						suggestion: 'Use ANS-104 or HTTP-SIG signing format'
-					}
-				);
+				throw new CryptographicError(ErrorCode.CRYPTO_SIGNER_TYPE_UNKNOWN, `Unknown signer type: ${kind}`, {
+					provided: kind,
+					supportedTypes: Object.values(SigningFormatType),
+					suggestion: 'Use ANS-104 or HTTP-SIG signing format',
+				});
 		}
 	};
 }

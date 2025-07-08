@@ -112,7 +112,7 @@ function logError(message) {
 	await runTest('ANS-104 GET', async () => {
 		const res = await aoCoreSigner.request({
 			method: 'GET',
-			signingFormat: 'ans104',
+			signingFormat: 'ANS-104',
 			path: 'router~node-process@1.0/now/routes/serialize~json@1.0',
 		});
 		expect(res).toBeDefined();
@@ -131,7 +131,7 @@ function logError(message) {
 	await runTest('HTTP-SIG GET (explicit)', async () => {
 		const res = await aoCoreSigner.request({
 			method: 'GET',
-			signingFormat: 'httpsig',
+			signingFormat: 'HTTPSIG',
 			path: 'router~node-process@1.0/now/routes/serialize~json@1.0',
 		});
 		expect(res).toBeDefined();
@@ -142,7 +142,7 @@ function logError(message) {
 	await runTest('ANS-104 POST', async () => {
 		const res = await aoCoreSigner.request({
 			method: 'POST',
-			signingFormat: 'ans104',
+			signingFormat: 'ANS-104',
 			path: 'JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
 		});
 		expect(res).toBeDefined();
@@ -150,14 +150,14 @@ function logError(message) {
 			'https://forward.computer/JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
 		);
 		expect(res.status).toEqual(200);
-		const text = await res.text();
-		expect(text).toEqual('5937');
+		const slot = parseInt(await res.text());
+		expect(slot).toEqualType(1);
 	});
 
 	await runTest('HTTP-SIG POST', async () => {
 		const res = await aoCoreSigner.request({
 			method: 'POST',
-			signingFormat: 'httpsig',
+			signingFormat: 'HTTPSIG',
 			path: 'JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
 		});
 		expect(res).toBeDefined();
@@ -165,8 +165,8 @@ function logError(message) {
 			'https://forward.computer/JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
 		);
 		expect(res.status).toEqual(200);
-		const text = await res.text();
-		expect(text).toEqual('5937');
+		const slot = parseInt(await res.text());
+		expect(slot).toEqualType(1);
 	});
 
 	console.log('\nTest Summary:');

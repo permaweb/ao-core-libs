@@ -28,8 +28,8 @@ export type RequestMethodType = 'GET' | 'POST';
 
 /* Signing Formats */
 export enum SigningFormatType {
-	ANS_104 = 'ans104',
-	HTTP_SIG = 'httpsig',
+	ANS_104 = 'ANS-104',
+	HTTP_SIG = 'HTTPSIG',
 }
 
 /* Minimal Request shape for HTTP signing */
