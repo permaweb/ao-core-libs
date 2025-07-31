@@ -97,7 +97,7 @@ export function request(deps: DependenciesType) {
 			const response = await fetch(requestURL, httpRequestArgs);
 
 			if (!response.ok) {
-				debugLog('error', 'HTTP Response:', response);
+				// debugLog('error', 'HTTP Response:', response);
 				debugLog('error', 'HTTP Response Body:', await response.text());
 			}
 

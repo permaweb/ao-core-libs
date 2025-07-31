@@ -6,6 +6,21 @@ try {
 	hasNodeBuffer = true;
 } catch {}
 
+// Import Buffer shim for compatibility with ao/connect
+let BufferShim: typeof Buffer;
+try {
+	// @ts-ignore
+	BufferShim = require('buffer/index.js').Buffer;
+	if (!globalThis.Buffer) globalThis.Buffer = BufferShim;
+} catch {}
+
+// Import base64url for compatibility
+let base64url: any;
+try {
+	// @ts-ignore
+	base64url = require('base64url');
+} catch {}
+
 import { EncodingError, ErrorCode } from './errors.ts';
 import { DebugLogType, POJO } from './types.ts';
 
@@ -15,7 +30,7 @@ const enabled = new Set(raw.split(',').map((s) => s.trim()));
 export function debugLog(level: DebugLogType, ...args: unknown[]) {
 	if (!(enabled.has(level) || enabled.has('*'))) return;
 
-	let prefix = `[${level.toUpperCase()}]`;
+	let prefix = `[@permaweb/ao-core-libs - ${level.toUpperCase()}]`;
 	switch (level) {
 		case 'info':
 			prefix = `\x1b[36m${prefix}\x1b[0m`;
@@ -99,24 +114,50 @@ export function decodeBase64UrlToBytes(b64url: string): Uint8Array {
  * Convert a base64url‐encoded *string* or a Uint8Array/ArrayBufferView
  * into a Uint8Array of raw bytes.
  */
-export function toView(value: string | ArrayBufferView | Buffer): Uint8Array {
-	if (Buffer.isBuffer(value)) {
-		return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-	}
+// export function toView(value: string | ArrayBufferView | Buffer): Uint8Array {
+// 	if (Buffer.isBuffer(value)) {
+// 		return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+// 	}
 
+// 	if (ArrayBuffer.isView(value)) {
+// 		return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+// 	}
+
+// 	if (typeof value === 'string') {
+// 		return decodeBase64UrlToBytes(value);
+// 	}
+
+// 	throw new EncodingError(ErrorCode.ENCODING_UNSUPPORTED_INPUT_TYPE, 'Unsupported input type for toView conversion', {
+// 		provided: typeof value,
+// 		supportedTypes: ['string', 'Buffer', 'Uint8Array', 'ArrayBufferView'],
+// 		suggestion: 'Convert input to string (base64url) or byte array format',
+// 	});
+// }
+
+export const toView = (value: any) => {
+	if (ArrayBuffer.isView(value)) value = Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+	else if (typeof value === 'string') value = base64url.toBuffer(value);
+	else throw new Error('Unexpected type. Value must be one of Uint8Array, ArrayBuffer, or base64url-encoded string');
+	return value;
+};
+
+/**
+ * Convert value to Buffer (ao/connect compatible version)
+ * This matches the exact behavior of ao/connect's toView function
+ */
+export function toViewBuffer(value: string | ArrayBufferView | Buffer): Buffer {
 	if (ArrayBuffer.isView(value)) {
-		return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+		return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
 	}
-
 	if (typeof value === 'string') {
-		return decodeBase64UrlToBytes(value);
+		if (base64url && base64url.toBuffer) {
+			return base64url.toBuffer(value);
+		}
+		// Fallback to manual conversion
+		const bytes = decodeBase64UrlToBytes(value);
+		return Buffer.from(bytes);
 	}
-
-	throw new EncodingError(ErrorCode.ENCODING_UNSUPPORTED_INPUT_TYPE, 'Unsupported input type for toView conversion', {
-		provided: typeof value,
-		supportedTypes: ['string', 'Buffer', 'Uint8Array', 'ArrayBufferView'],
-		suggestion: 'Convert input to string (base64url) or byte array format',
-	});
+	throw new Error('Unexpected type. Value must be one of Uint8Array, ArrayBuffer, or base64url-encoded string');
 }
 
 /** Helper to detect byte arrays */
