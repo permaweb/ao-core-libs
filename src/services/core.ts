@@ -97,8 +97,18 @@ export function request(deps: DependenciesType) {
 			const response = await fetch(requestURL, httpRequestArgs);
 
 			if (!response.ok) {
-				// debugLog('error', 'HTTP Response:', response);
-				debugLog('error', 'HTTP Response Body:', await response.text());
+				const bodyText = await response
+					.clone()
+					.text()
+					.catch((e) => {
+						debugLog('error', 'Failed to read cloned body as text', e);
+						return `Error reading body: ${e.message}`;
+					});
+				debugLog('error', 'HTTP Response:', {
+					status: response.status,
+					url: response.url,
+					body: bodyText,
+				});
 			}
 
 			return response;

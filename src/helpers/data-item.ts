@@ -158,7 +158,7 @@ export function toANS104Request(fields: DataItemFields): { headers: Record<strin
 		});
 	}
 
-	const { target = '', anchor = '', data = '', Type, Variant, ...rest } = fields;
+	const { target, anchor, data, Type, Variant, ...rest } = fields;
 
 	const excludeList = ['target', 'anchor', 'data', 'data-protocol', 'variant', 'dryrun', 'type', 'path', 'method'];
 
@@ -173,10 +173,6 @@ export function toANS104Request(fields: DataItemFields): { headers: Record<strin
 				value: String(value),
 			});
 		}
-		dynamicTags.push({
-			name,
-			value: String(value),
-		});
 	}
 
 	const tags = [
