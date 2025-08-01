@@ -3,7 +3,14 @@ import { createData, DataItem, SIG_CONFIG } from '@dha-team/arbundles';
 import { CryptographicError, ErrorCode, ValidationError } from './errors.ts';
 import { validateHashInput, validateSignatureData } from './security.ts';
 import { CreateInput, DataItemFields, SignerType, SigningFormatType } from './types.ts';
-import { debugLog, encodeBase64Url, sha256, toView } from './utils.ts';
+import { debugLog, encodeBase64Url, sha256, toView, toViewBuffer } from './utils.ts';
+
+// Import base64url for ao/connect compatibility
+let base64url: any;
+try {
+	// @ts-ignore
+	base64url = require('base64url');
+} catch {}
 
 export function createDataItemBytes(data: any, signer: any, opts: any) {
 	const signerMeta = (SIG_CONFIG as any)[signer.type];
@@ -77,7 +84,7 @@ export function toDataItemSigner(signer: SignerType) {
 			const { publicKey, type = 1, alg = 'rsa-v1_5-sha256' } = injected;
 
 			/* Build the unsigned bytes for the data item */
-			unsignedBytes = createDataItemBytes(data, { type, publicKey: toView(publicKey) }, { target, tags, anchor });
+			unsignedBytes = createDataItemBytes(data, { type, publicKey: toViewBuffer(publicKey) }, { target, tags, anchor });
 
 			debugLog('info', 'Unsigned Bytes', unsignedBytes);
 
@@ -115,11 +122,11 @@ export function toDataItemSigner(signer: SignerType) {
 				},
 			);
 		}
-		const rawSig = toView(res.signature);
+		const rawSig = toViewBuffer(res.signature);
 
-		// Splice the raw signature into the unsigned bytes
-		const signedBytes = new Uint8Array(unsignedBytes!);
-		signedBytes.set(Buffer.isBuffer(rawSig) ? new Uint8Array(rawSig) : rawSig, 2);
+		// Splice the raw signature into the unsigned bytes (match ao/connect exactly)
+		const signedBytes = unsignedBytes!;
+		signedBytes.set(rawSig, 2);
 
 		// Validate signature data before verification
 		validateSignatureData(rawSig, 'data item signature');
@@ -136,11 +143,9 @@ export function toDataItemSigner(signer: SignerType) {
 			);
 		}
 
-		// Compute the DataItem ID = base64url( SHA-256(rawSig) )
-		const rawSigBytes = Buffer.isBuffer(rawSig) ? new Uint8Array(rawSig) : rawSig;
-		validateHashInput(rawSigBytes, 'signature data for ID generation');
-		const hashBuffer = await sha256(rawSigBytes.buffer);
-		const id = encodeBase64Url(hashBuffer);
+		// Compute the DataItem ID = base64url( SHA-256(rawSig) ) - match ao/connect exactly
+		const hashResult = await crypto.subtle.digest('SHA-256', rawSig);
+		const id = base64url && base64url.encode ? base64url.encode(Buffer.from(hashResult)) : encodeBase64Url(hashResult);
 
 		return { id, raw: signedBytes };
 	};
@@ -153,7 +158,7 @@ export function toANS104Request(fields: DataItemFields): { headers: Record<strin
 		});
 	}
 
-	const { target = '', anchor = '', data = '', Type, Variant, ...rest } = fields;
+	const { target, anchor, data, Type, Variant, ...rest } = fields;
 
 	const excludeList = ['target', 'anchor', 'data', 'data-protocol', 'variant', 'dryrun', 'type', 'path', 'method'];
 
