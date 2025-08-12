@@ -59,7 +59,7 @@ const response = await aoCore.request({
 	method: 'POST',
 	'signing-format': 'httpsig',
 	path: 'JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
-	myCustomField: '1234',
+	'my-custom-field': '1234',
 });
 ```
 
