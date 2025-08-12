@@ -1,6 +1,5 @@
 import esbuild from 'esbuild';
 import alias from 'esbuild-plugin-alias';
-import dtsPlugin from 'esbuild-plugin-d.ts';
 import { nodeModulesPolyfillPlugin } from 'esbuild-plugins-node-modules-polyfill';
 import { createRequire } from 'module';
 import path from 'path';
@@ -40,7 +39,7 @@ const nodeCjsConfig = {
 		'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
 	},
 	external: ['process', 'stream/promises', '@dha-team/arbundles', 'http-message-signatures'],
-	plugins: [nodeAlias], // , dtsPlugin({ outDir: typesDir })
+	plugins: [nodeAlias],
 };
 
 const nodeEsmConfig = {

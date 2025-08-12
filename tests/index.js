@@ -102,8 +102,9 @@ function logError(message) {
 		}
 	}
 
-	const aoCoreJwk = AOCore.init({ jwk });
-	const aoCoreSigner = AOCore.init({ signer: createSigner(jwk) });
+	const url = 'https://forward.computer';
+	const aoCoreJwk = AOCore.init({ jwk, url });
+	const aoCoreSigner = AOCore.init({ signer: createSigner(jwk), url });
 
 	await runTest('Initialization from JWK', () => {
 		expect(aoCoreJwk).toBeDefined();
@@ -112,7 +113,7 @@ function logError(message) {
 	await runTest('ANS-104 GET', async () => {
 		const res = await aoCoreSigner.request({
 			method: 'GET',
-			signingFormat: 'ANS-104',
+			['signing-format']: 'ans104',
 			path: 'router~node-process@1.0/now/routes/serialize~json@1.0',
 		});
 		expect(res).toBeDefined();
@@ -131,7 +132,7 @@ function logError(message) {
 	await runTest('HTTP-SIG GET (explicit)', async () => {
 		const res = await aoCoreSigner.request({
 			method: 'GET',
-			signingFormat: 'HTTPSIG',
+			['signing-format']: 'httpsig',
 			path: 'router~node-process@1.0/now/routes/serialize~json@1.0',
 		});
 		expect(res).toBeDefined();
@@ -142,7 +143,7 @@ function logError(message) {
 	await runTest('ANS-104 POST', async () => {
 		const res = await aoCoreSigner.request({
 			method: 'POST',
-			signingFormat: 'ANS-104',
+			['signing-format']: 'ans104',
 			path: 'JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
 		});
 		expect(res).toBeDefined();
@@ -157,7 +158,7 @@ function logError(message) {
 	await runTest('HTTP-SIG POST', async () => {
 		const res = await aoCoreSigner.request({
 			method: 'POST',
-			signingFormat: 'HTTPSIG',
+			['signing-format']: 'httpsig',
 			path: 'JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
 		});
 		expect(res).toBeDefined();

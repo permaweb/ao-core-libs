@@ -11,7 +11,7 @@ export type DependenciesType = {
 export interface RequestType {
 	path: string;
 	method?: RequestMethodType;
-	signingFormat?: SigningFormatType;
+	['signing-format']?: SigningFormatType;
 	process?: string;
 	device?: string;
 	url?: string;
@@ -20,7 +20,7 @@ export interface RequestType {
 	data?: string | Uint8Array | Buffer;
 	Type?: string;
 	Variant?: string;
-	[key: string]: unknown; // For additional dynamic fields
+	[key: string]: unknown;
 }
 
 /* HTTP Method used in Request */
@@ -28,8 +28,8 @@ export type RequestMethodType = 'GET' | 'POST';
 
 /* Signing Formats */
 export enum SigningFormatType {
-	ANS_104 = 'ANS-104',
-	HTTP_SIG = 'HTTPSIG',
+	ANS_104 = 'ans104',
+	HTTP_SIG = 'httpsig',
 }
 
 /* Minimal Request shape for HTTP signing */

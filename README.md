@@ -49,7 +49,7 @@ This SDK exposes a single function, `request`, for communicating with AO Core, w
 
 - `path` – The endpoint path (no leading slash)
 - `method` – (optional - defaults to `GET`) HTTP Request Method (`GET` or `POST`)
-- `signingFormat` – (optional - defaults to `HTTP-SIG`) Signing Format (`ANS-104` or `HTTP-SIG`)
+- `signing-format` – (optional - defaults to `httpsig`) Signing Format (`ans104` or `httpsig`)
 - _Any additional fields_ – All other fields passed in will be included as part of the request payload (e.g. custom headers, tags, or data fields depending on the signing format)
 
 ### Example
@@ -57,7 +57,7 @@ This SDK exposes a single function, `request`, for communicating with AO Core, w
 ```typescript
 const response = await aoCore.request({
 	method: 'POST',
-	signingFormat: 'HTTP-SIG',
+	'signing-format': 'httpsig',
 	path: 'JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
 	myCustomField: '1234',
 });
