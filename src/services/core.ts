@@ -8,7 +8,7 @@ export function request(deps: DependenciesType) {
 	return async (args: RequestType): Promise<Response> => {
 		validateRequest(args);
 
-		const signingFormat = args.signingFormat ?? SigningFormatType.HTTP_SIG;
+		const signingFormat = args['signing-format'] ?? SigningFormatType.HTTP_SIG;
 		const requestURL = joinURL({ url: deps.url!, path: args.path });
 
 		/* GET Requests do not allow for a body, while ANS-104 uses the data item as the body */
@@ -17,7 +17,7 @@ export function request(deps: DependenciesType) {
 		const { path, method, ...remainingFields } = args;
 
 		/* Ensure the signing format is present on remaining fields if not passed in args */
-		if (!remainingFields.signingFormat) remainingFields.signingFormat = signingFormat;
+		if (!remainingFields['signing-format']) remainingFields['signing-format'] = signingFormat;
 
 		debugLog('info', 'Request URL:', requestURL);
 		debugLog('info', 'Signing Format:', signingFormat);
@@ -96,20 +96,18 @@ export function request(deps: DependenciesType) {
 
 			const response = await fetch(requestURL, httpRequestArgs);
 
-			if (!response.ok) {
-				const bodyText = await response
-					.clone()
-					.text()
-					.catch((e) => {
-						debugLog('error', 'Failed to read cloned body as text', e);
-						return `Error reading body: ${e.message}`;
-					});
-				debugLog('error', 'HTTP Response:', {
-					status: response.status,
-					url: response.url,
-					body: bodyText,
+			const bodyText = await response
+				.clone()
+				.text()
+				.catch((e) => {
+					debugLog('error', 'Failed to read cloned body as text', e);
+					return `Error reading body: ${e.message}`;
 				});
-			}
+			debugLog(response.ok ? 'info' : 'error', 'HTTP Response:', {
+				status: response.status,
+				url: response.url,
+				body: bodyText,
+			});
 
 			return response;
 		} catch (e: unknown) {
@@ -138,11 +136,15 @@ export function validateRequest(args: RequestType): void {
 	}
 
 	const validFormats = Object.values(SigningFormatType);
-	if (args.signingFormat && !validFormats.includes(args.signingFormat)) {
-		throw new ValidationError(ErrorCode.VALIDATION_INVALID_FORMAT, `Invalid signing format: ${args.signingFormat}`, {
-			provided: args.signingFormat,
-			validFormats,
-			suggestion: `Use one of: ${validFormats.join(', ')}`,
-		});
+	if (args['signing-format'] && !validFormats.includes(args['signing-format'])) {
+		throw new ValidationError(
+			ErrorCode.VALIDATION_INVALID_FORMAT,
+			`Invalid signing format: ${args['signing-format']}`,
+			{
+				provided: args['signing-format'],
+				validFormats,
+				suggestion: `Use one of: ${validFormats.join(', ')}`,
+			},
+		);
 	}
 }

@@ -48,7 +48,7 @@ export async function getRawAndId(dataItemBytes: Uint8Array) {
 	 */
 	const rawSignature = dataItem.rawSignature;
 	validateHashInput(rawSignature, 'signature for ID calculation');
-	const rawId = await sha256(rawSignature.buffer);
+	const rawId = await sha256(rawSignature.buffer as any);
 
 	return {
 		id: encodeBase64Url(rawId),
@@ -144,7 +144,7 @@ export function toDataItemSigner(signer: SignerType) {
 		}
 
 		// Compute the DataItem ID = base64url( SHA-256(rawSig) ) - match ao/connect exactly
-		const hashResult = await crypto.subtle.digest('SHA-256', rawSig);
+		const hashResult = await crypto.subtle.digest('SHA-256', rawSig as any);
 		const id = base64url && base64url.encode ? base64url.encode(Buffer.from(hashResult)) : encodeBase64Url(hashResult);
 
 		return { id, raw: signedBytes };
