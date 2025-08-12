@@ -2,7 +2,7 @@
 
 This SDK provides a JavaScript interface for communicating with AO-Core.
 
-AO-Core is a protocol and standard for distributed computation that forms the foundation of the AO computer. Inspired by and built upon concepts from the Erlang language, AO-Core embraces the actor model for concurrent, distributed systems. Unlike traditional blockchain systems, AO-Core defines a flexible, powerful computation protocol that enables a wide range of applications beyond just running Lua programs.
+AO-Core is a protocol and standard for distributed computation that forms the foundation of the [AO Computer](https://ao.arweave.net). Inspired by and built upon concepts from the Erlang language, AO-Core embraces the actor model for concurrent, distributed systems. It defines a minimal, generalized model for decentralized computation built around standard web technologies like HTTP.
 
 For a full breakdown of AO-Core, see the [documentation](https://hyperbeam.arweave.net/build/introduction/what-is-ao-core.html).
 
