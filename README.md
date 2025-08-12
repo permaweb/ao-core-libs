@@ -57,8 +57,8 @@ This SDK exposes a single function, `request`, for communicating with AO Core, w
 ```typescript
 const response = await aoCore.request({
 	method: 'POST',
-	'signing-format': 'httpsig',
 	path: 'JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
+	'signing-format': 'httpsig',
 	'my-custom-field': '1234',
 });
 ```
