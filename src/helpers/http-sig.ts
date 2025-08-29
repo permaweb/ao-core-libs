@@ -316,8 +316,6 @@ export async function toHBRequest(obj: POJO = {}): Promise<{ headers: Headers; b
 		headers.append('Content-Digest', `sha-256=:${cdB64}:`);
 	}
 
-	debugLog('info', 'To HB Request', { headers, body });
-
 	return { headers, body };
 }
 
