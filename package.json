@@ -1,6 +1,6 @@
 {
 	"name": "@permaweb/ao-core-libs",
-	"version": "0.0.3",
+	"version": "0.0.4",
 	"type": "module",
 	"main": "dist/index.cjs",
 	"module": "dist/index.js",
@@ -34,6 +34,7 @@
 			"import": "./dist/index.js",
 			"require": "./dist/index.cjs"
 		},
+		"./browser": "./dist/index.esm.js",
 		"./package.json": "./package.json"
 	},
 	"scripts": {
@@ -43,7 +44,7 @@
 	},
 	"dependencies": {
 		"@dha-team/arbundles": "^1.0.3",
-		"axios": "^1.10.0",
+		"axios": "^1.11.0",
 		"constants-browserify": "^1.0.0",
 		"http-message-signatures": "^1.0.4",
 		"structured-headers": "^2.0.1"

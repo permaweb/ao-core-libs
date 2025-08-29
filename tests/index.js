@@ -102,7 +102,10 @@ function logError(message) {
 		}
 	}
 
-	const url = 'https://forward.computer';
+	const url = process.argv[2] || 'http://localhost:8734';
+
+	logTest(`[AO Core Libs] Testing on URL: ${url}`);
+
 	const aoCoreJwk = AOCore.init({ jwk, url });
 	const aoCoreSigner = AOCore.init({ signer: createSigner(jwk), url });
 
@@ -110,69 +113,114 @@ function logError(message) {
 		expect(aoCoreJwk).toBeDefined();
 	});
 
-	await runTest('ANS-104 GET', async () => {
+	let scheduler;
+	let processId;
+
+	await runTest('HTTP-SIG GET (DEFAULTS)', async () => {
 		const res = await aoCoreSigner.request({
-			method: 'GET',
-			['signing-format']: 'ans104',
-			path: 'router~node-process@1.0/now/routes/serialize~json@1.0',
+			path: '~meta@1.0/info/address',
 		});
 		expect(res).toBeDefined();
 		expect(res.status).toEqual(200);
+
+		scheduler = await res.text();
+		expect(scheduler).toEqualType('string');
 	});
 
-	await runTest('HTTP-SIG GET (defaults)', async () => {
+	await runTest('HTTP-SIG GET (EXPLICIT)', async () => {
 		const res = await aoCoreSigner.request({
-			path: 'router~node-process@1.0/now/routes/serialize~json@1.0',
+			path: '~meta@1.0/info/address',
+			method: 'GET',
+			'signing-format': 'httpsig',
 		});
 		expect(res).toBeDefined();
-		expect(res.url).toEqual('https://forward.computer/router~node-process@1.0/now/routes/serialize~json@1.0');
 		expect(res.status).toEqual(200);
+
+		scheduler = await res.text();
+		expect(scheduler).toEqualType('string');
 	});
 
-	await runTest('HTTP-SIG GET (explicit)', async () => {
+	await runTest('HTTP-SIG GET (JSON)', async () => {
 		const res = await aoCoreSigner.request({
+			path: '~meta@1.0/info/address',
 			method: 'GET',
-			['signing-format']: 'httpsig',
-			path: 'router~node-process@1.0/now/routes/serialize~json@1.0',
+			'signing-format': 'httpsig',
+			accept: 'application/json',
 		});
+
 		expect(res).toBeDefined();
-		expect(res.url).toEqual('https://forward.computer/router~node-process@1.0/now/routes/serialize~json@1.0');
 		expect(res.status).toEqual(200);
+
+		const parsed = await res.json();
+		scheduler = parsed.body;
+		expect(scheduler).toEqualType('string');
 	});
+
+	await runTest('ANS-104 POST [Spawn]', async () => {
+		const res = await aoCoreSigner.request({
+			method: 'POST',
+			'signing-format': 'ans104',
+			path: '/push',
+			'accept-bundle': 'true',
+			'accept-codec': 'httpsig@1.0',
+			device: 'process@1.0',
+			scheduler: scheduler,
+			'scheduler-location': scheduler,
+			'scheduler-device': 'scheduler@1.0',
+			'push-device': 'push@1.0',
+			'execution-device': 'genesis-wasm@1.0',
+			Authority: scheduler,
+			Module: 'URgYpPQzvxxfYQtjrIQ116bl3YBfcImo3JEnNo8Hlrk',
+			Type: 'Process',
+			'Data-Protocol': 'ao',
+			Variant: 'ao.N.1',
+			data: '1984',
+		});
+
+		processId = res.headers.get('process');
+
+		expect(res).toBeDefined();
+		expect(res.status).toEqual(200);
+		expect(processId).toEqualType('string');
+	});
+
+	if (!processId) {
+		logError('Process Spawn Failed - Aborting');
+		process.exit(1);
+	}
 
 	await runTest('ANS-104 POST', async () => {
 		const res = await aoCoreSigner.request({
 			method: 'POST',
 			['signing-format']: 'ans104',
-			path: 'JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
+			path: `${processId}~process@1.0/compute/at-slot`,
 		});
 		expect(res).toBeDefined();
-		expect(res.url).toEqual(
-			'https://forward.computer/JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
-		);
 		expect(res.status).toEqual(200);
-		const slot = parseInt(await res.text());
-		expect(slot).toEqualType(1);
+		const slot = await res.text();
+		const isValidSlot = Number.isFinite(Number(slot));
+		expect(isValidSlot).toEqual(true);
 	});
 
 	await runTest('HTTP-SIG POST', async () => {
 		const res = await aoCoreSigner.request({
 			method: 'POST',
 			['signing-format']: 'httpsig',
-			path: 'JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
+			path: `${processId}~process@1.0/compute/at-slot`,
 		});
 		expect(res).toBeDefined();
-		expect(res.url).toEqual(
-			'https://forward.computer/JC0_BVWWf7xbmXUeKskDBRQ5fJo8fWgPtaEYMOf-Vbk~process@1.0/compute/at-slot',
-		);
 		expect(res.status).toEqual(200);
-		const slot = parseInt(await res.text());
-		expect(slot).toEqualType(1);
+		const slot = await res.text();
+		const isValidSlot = Number.isFinite(Number(slot));
+		expect(isValidSlot).toEqual(true);
 	});
 
-	console.log('\nTest Summary:');
-	console.log(`    Passed: ${passed}`);
-	console.log(`    Failed: ${failed}`);
+	logTest('\nAO Core Libs Test Summary:');
+	console.log(`   \x1b[32mPassed\x1b[0m: ${passed}`);
+	console.log(`   \x1b[31mFailed\x1b[0m: ${failed}`);
+
+	if (failed > 0) console.log(`\x1b[31mAO Core Libs Tests Failed\x1b[0m`);
+	else console.log(`\x1b[32mAll AO Core Libs Tests Passed\x1b[0m`);
 
 	process.exit(failed > 0 ? 1 : 0);
 })();
