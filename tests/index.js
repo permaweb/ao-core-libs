@@ -156,6 +156,9 @@ function logError(message) {
 		expect(scheduler).toEqualType('string');
 	});
 
+	/* Set to the actual scheduler node */
+	scheduler = 'NoZH3pueH0Cih6zjSNu_KRAcmg4ZJV1aGHKi0Pi5_Hc';
+
 	await runTest('ANS-104 POST [Spawn]', async () => {
 		const res = await aoCoreSigner.request({
 			method: 'POST',
