@@ -6,15 +6,16 @@ import { createSigner } from './signers/common.ts';
 
 const DEFAULT_URL = 'https://forward.computer';
 
-function init(deps: DependenciesType) {
+function init(deps: DependenciesType = {}) {
 	validateDependencies(deps);
 
-	if (!deps.signer && deps.jwk) deps = { ...deps, signer: createSigner(deps.jwk) };
-	if (!deps.url) deps = { ...deps, url: DEFAULT_URL };
-
-	return {
-		request: request(deps),
+	const resolvedDeps = {
+		url: DEFAULT_URL,
+		...deps,
+		signer: deps.signer ?? (deps.jwk ? createSigner(deps.jwk) : undefined),
 	};
+
+	return { request: request(resolvedDeps) };
 }
 
 export function validateDependencies(deps: DependenciesType): void {
@@ -22,23 +23,17 @@ export function validateDependencies(deps: DependenciesType): void {
 		throw new ValidationError(
 			ErrorCode.VALIDATION_MISSING_DEPENDENCIES,
 			'Dependencies object is required for SDK initialization',
-			{ suggestion: 'Provide an object with either jwk or signer property' },
-		);
-	}
-	if (!deps.jwk && !deps.signer) {
-		throw new ValidationError(
-			ErrorCode.VALIDATION_MISSING_JWK_OR_SIGNER,
-			'Either JWK wallet or custom signer must be provided',
-			{
-				provided: Object.keys(deps),
-				suggestion: 'Add jwk property with your Arweave wallet or signer property with custom signer',
-			},
+			{ suggestion: 'Provide an object with optional jwk, signer, and url properties' },
 		);
 	}
 
-	// Validate JWK if provided (createSigner will also validate, but we want early validation)
+	// Signer and JWK are optional — only validate JWK if present
 	if (deps.jwk) {
-		validateJWK(deps.jwk);
+		try {
+			validateJWK(deps.jwk);
+		} catch (err) {
+			throw new ValidationError(ErrorCode.VALIDATION_INVALID_JWK, 'Provided JWK is invalid', { cause: err });
+		}
 	}
 }
 

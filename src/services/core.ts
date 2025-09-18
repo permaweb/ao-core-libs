@@ -30,35 +30,41 @@ export function request(deps: DependenciesType) {
 			switch (signingFormat) {
 				case SigningFormatType.ANS_104:
 					unsignedRequest = toANS104Request(remainingFields);
-					signedRequest = await toDataItemSigner(deps.signer!)(unsignedRequest.item);
 
-					httpRequest = {
-						headers: unsignedRequest.headers,
-						body: signedRequest.raw,
-					};
+					const body = deps.signer
+						? (await toDataItemSigner(deps.signer)(unsignedRequest.item)).raw
+						: unsignedRequest.item;
+
+					httpRequest = { headers: unsignedRequest.headers, body };
 
 					break;
 				case SigningFormatType.HTTP_SIG:
 					unsignedRequest = await toHBRequest(remainingFields);
 
-					if (unsignedRequest && deps.signer) {
+					if (!unsignedRequest) {
+						throw new RequestError(ErrorCode.REQUEST_PREPARATION_FAILED, 'Error preparing HTTP-SIG request', {
+							signingFormat,
+							suggestion: 'Check request parameters',
+						});
+					}
+
+					if (deps.signer) {
 						const signingArgs = toSigBaseArgs({
 							url: requestURL,
 							method: requestMethod,
 							headers: unsignedRequest.headers,
 						});
 
-						signedRequest = await toHttpSigner(deps.signer!)(signingArgs);
-
+						const signedRequest = await toHttpSigner(deps.signer)(signingArgs);
 						httpRequest = { ...signedRequest };
-
-						break;
 					} else {
-						throw new RequestError(ErrorCode.REQUEST_PREPARATION_FAILED, 'Error preparing HTTP-SIG request', {
-							signingFormat,
-							suggestion: 'Check signer configuration and request parameters',
-						});
+						httpRequest = {
+							headers: unsignedRequest.headers as any,
+							body: unsignedRequest.body,
+						};
 					}
+
+					break;
 			}
 		} catch (e: unknown) {
 			throw new RequestError(
@@ -69,20 +75,7 @@ export function request(deps: DependenciesType) {
 			);
 		}
 
-		if (!unsignedRequest || !signedRequest || !httpRequest) {
-			throw new RequestError(
-				ErrorCode.REQUEST_PREPARATION_FAILED,
-				'Request preparation incomplete - missing required components',
-				{
-					unsignedRequest: !!unsignedRequest,
-					signedRequest: !!signedRequest,
-					httpRequest: !!httpRequest,
-					suggestion: 'Check signer configuration and request parameters',
-				},
-			);
-		}
-
-		debugLog('info', 'Signed Request', signedRequest);
+		if (signedRequest) debugLog('info', 'Signed Request', signedRequest);
 		debugLog('info', 'HTTP Request', httpRequest);
 
 		try {
