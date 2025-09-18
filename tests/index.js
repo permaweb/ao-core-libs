@@ -76,48 +76,52 @@ function expect(actual) {
 	};
 }
 
-function logTest(message) {
-	console.log('\x1b[90m%s\x1b[0m', `\n${message}`);
+function logTest(prefix, message) {
+	const test = `${prefix} - ${message}`;
+	console.log(test);
+	return test;
+}
+
+function logInfo(message) {
+	console.log('\x1b[90m%s\x1b[0m', `${message}`);
 }
 
 function logError(message) {
 	console.error('\x1b[31m%s\x1b[0m', `Error (${message})`);
 }
 
-(async function () {
-	const jwk = JSON.parse(fs.readFileSync(process.env.PATH_TO_WALLET));
+let passed = 0;
+let failed = 0;
 
-	let passed = 0;
-	let failed = 0;
-
-	async function runTest(name, fn) {
-		try {
-			await fn();
-			logTest(`Pass: ${name}`);
-			passed++;
-		} catch (err) {
-			logError(`Fail: ${name}`);
-			console.error(err);
-			failed++;
-		}
+async function runTest(name, fn) {
+	try {
+		await fn();
+		logInfo(`Pass: ${name}`);
+		passed++;
+	} catch (err) {
+		logError(`Fail: ${name}`);
+		console.error(err);
+		failed++;
 	}
+}
 
-	const url = process.argv[2] || 'http://localhost:8734';
-
-	logTest(`[AO Core Libs] Testing on URL: ${url}`);
-
-	const aoCoreJwk = AOCore.init({ jwk, url });
-	const aoCoreSigner = AOCore.init({ signer: createSigner(jwk), url });
-
-	await runTest('Initialization from JWK', () => {
-		expect(aoCoreJwk).toBeDefined();
-	});
+async function runTests(deps) {
+	let prefix = '';
+	if (!deps?.signer && !deps?.jwk) prefix = 'Unsigned';
+	else if (deps.jwk && !deps.signer) prefix = 'JWK';
+	else if (deps.signer) prefix = 'Signer';
 
 	let scheduler;
 	let processId;
 
-	await runTest('HTTP-SIG GET (DEFAULTS)', async () => {
-		const res = await aoCoreSigner.request({
+	const aoCore = AOCore.init(deps);
+
+	await runTest(logTest(prefix, 'Initialization'), () => {
+		expect(aoCore).toBeDefined();
+	});
+
+	await runTest(logTest(prefix, 'HTTP-SIG GET (DEFAULTS)'), async () => {
+		const res = await aoCore.request({
 			path: '~meta@1.0/info/address',
 		});
 		expect(res).toBeDefined();
@@ -127,8 +131,8 @@ function logError(message) {
 		expect(scheduler).toEqualType('string');
 	});
 
-	await runTest('HTTP-SIG GET (EXPLICIT)', async () => {
-		const res = await aoCoreSigner.request({
+	await runTest(logTest(prefix, 'HTTP-SIG GET (EXPLICIT)'), async () => {
+		const res = await aoCore.request({
 			path: '~meta@1.0/info/address',
 			method: 'GET',
 			'signing-format': 'httpsig',
@@ -140,8 +144,8 @@ function logError(message) {
 		expect(scheduler).toEqualType('string');
 	});
 
-	await runTest('HTTP-SIG GET (JSON)', async () => {
-		const res = await aoCoreSigner.request({
+	await runTest(logTest(prefix, 'HTTP-SIG GET (JSON)'), async () => {
+		const res = await aoCore.request({
 			path: '~meta@1.0/info/address',
 			method: 'GET',
 			'signing-format': 'httpsig',
@@ -156,11 +160,11 @@ function logError(message) {
 		expect(scheduler).toEqualType('string');
 	});
 
-	/* Set to the actual scheduler node */
-	scheduler = 'NoZH3pueH0Cih6zjSNu_KRAcmg4ZJV1aGHKi0Pi5_Hc';
+	/* The following requests require a signature */
+	if (prefix === 'Unsigned') return;
 
-	await runTest('ANS-104 POST [Spawn]', async () => {
-		const res = await aoCoreSigner.request({
+	await runTest(logTest(prefix, 'ANS-104 POST [Spawn]'), async () => {
+		const res = await aoCore.request({
 			method: 'POST',
 			'signing-format': 'ans104',
 			path: '/push',
@@ -178,6 +182,7 @@ function logError(message) {
 			'Data-Protocol': 'ao',
 			Variant: 'ao.N.1',
 			data: '1984',
+			name: Date.now().toString(),
 		});
 
 		processId = res.headers.get('process');
@@ -192,8 +197,8 @@ function logError(message) {
 		process.exit(1);
 	}
 
-	await runTest('ANS-104 POST', async () => {
-		const res = await aoCoreSigner.request({
+	await runTest(logTest(prefix, 'ANS-104 POST'), async () => {
+		const res = await aoCore.request({
 			method: 'POST',
 			['signing-format']: 'ans104',
 			path: `${processId}~process@1.0/compute/at-slot`,
@@ -205,8 +210,8 @@ function logError(message) {
 		expect(isValidSlot).toEqual(true);
 	});
 
-	await runTest('HTTP-SIG POST', async () => {
-		const res = await aoCoreSigner.request({
+	await runTest(logTest(prefix, 'HTTP-SIG POST'), async () => {
+		const res = await aoCore.request({
 			method: 'POST',
 			['signing-format']: 'httpsig',
 			path: `${processId}~process@1.0/compute/at-slot`,
@@ -217,10 +222,26 @@ function logError(message) {
 		const isValidSlot = Number.isFinite(Number(slot));
 		expect(isValidSlot).toEqual(true);
 	});
+}
 
-	logTest('\nAO Core Libs Test Summary:');
+(async function () {
+	const jwk = JSON.parse(fs.readFileSync(process.env.PATH_TO_WALLET));
+	const url = process.argv[2] || 'http://localhost:8734';
+
+	logInfo(`[AO Core Libs] Testing on URL: ${url}`);
+
+	/* Run tests without signing any requests */
+	await runTests({ url });
+
+	/* Have AOCore create a signer from a JWK */
+	await runTests({ jwk, url });
+
+	/* Pass a signer directly */
+	await runTests({ signer: createSigner(jwk), url });
+
+	logInfo('\nAO Core Libs Test Summary:');
 	console.log(`   \x1b[32mPassed\x1b[0m: ${passed}`);
-	console.log(`   \x1b[31mFailed\x1b[0m: ${failed}`);
+	console.log(`   \x1b[${failed > 0 ? '31' : '90'}mFailed\x1b[0m: ${failed}`);
 
 	if (failed > 0) console.log(`\x1b[31mAO Core Libs Tests Failed\x1b[0m`);
 	else console.log(`\x1b[32mAll AO Core Libs Tests Passed\x1b[0m`);

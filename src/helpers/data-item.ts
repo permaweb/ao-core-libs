@@ -143,7 +143,7 @@ export function toDataItemSigner(signer: SignerType) {
 			);
 		}
 
-		// Compute the DataItem ID = base64url( SHA-256(rawSig) ) - match ao/connect exactly
+		// Compute the DataItem ID = base64url( SHA-256(rawSig) )
 		const hashResult = await crypto.subtle.digest('SHA-256', rawSig as any);
 		const id = base64url && base64url.encode ? base64url.encode(Buffer.from(hashResult)) : encodeBase64Url(hashResult);
 
