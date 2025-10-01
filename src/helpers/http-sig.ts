@@ -182,7 +182,7 @@ export function toHttpSigner(signer: SignerType) {
 			const signingParameters = httpbis.createSigningParameters({
 				params: [...params].sort(),
 				paramValues: {
-					keyid: encodeBase64Url(publicKey),
+					keyid: `publickey:${encodeBase64Url(publicKey)}`,
 					alg,
 				},
 			});
@@ -347,10 +347,19 @@ export function toSigBaseArgs({ url, method, headers, includePath = false }: Sig
 	};
 }
 
+type SigRequest = {
+	body?: string
+} & HttpSigRequest
+
+type SigResponse = {
+	body?: string
+} & HttpSigResponse
+
+
 /**
  * Verifies if the httpsignatures from a request and response are valid
  */
-export async function verifySig(r: HttpSigRequest | HttpSigResponse) {
+export async function verifySig(r: SigRequest | SigResponse) {
 	// logic for finding a key based on the signature parameters
 	const keyLookup = async (params: SignatureParameters) => {
 		if (!params.keyid) {
