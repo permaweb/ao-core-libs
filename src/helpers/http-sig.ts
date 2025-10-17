@@ -1,4 +1,8 @@
 import { httpbis } from 'http-message-signatures';
+import { createVerifier } from 'http-message-signatures/lib/algorithm/index.js';
+import { verifyMessage } from 'http-message-signatures/lib/httpbis/index.js';
+import { Request as HttpSigRequest, Response as HttpSigResponse, SignatureParameters } from 'http-message-signatures/lib/types/index.js';
+
 import { parseItem, serializeList } from 'structured-headers';
 
 import { CryptographicError, EncodingError, ErrorCode } from './errors.ts';
@@ -178,7 +182,7 @@ export function toHttpSigner(signer: SignerType) {
 			const signingParameters = httpbis.createSigningParameters({
 				params: [...params].sort(),
 				paramValues: {
-					keyid: encodeBase64Url(publicKey),
+					keyid: `publickey:${encodeBase64Url(publicKey)}`,
 					alg,
 				},
 			});
@@ -341,4 +345,143 @@ export function toSigBaseArgs({ url, method, headers, includePath = false }: Sig
 			headers: hdrRecord,
 		},
 	};
+}
+
+type SigRequest = {
+	body?: string
+} & HttpSigRequest
+
+type SigResponse = {
+	body?: string
+} & HttpSigResponse
+
+
+/**
+ * Verifies if the httpsignatures from a request and response are valid
+ */
+export async function verifySig(r: SigRequest | SigResponse) {
+	// logic for finding a key based on the signature parameters
+	const keyLookup = async (params: SignatureParameters) => {
+		if (!params.keyid) {
+			return null
+		}
+
+		// Hyperbeam introduces keyid as 'scheme:keyid'
+		// So for the response we have to split to extract the keyid out of the scheme
+		// example: 'publickey:v+puaEOb5IkFZRB+XYon0NIEEffT6CmfP0gIf...'
+
+		if (params.alg == "hmac-sha256") {
+			const keySplit = params.keyid.split(':')
+			let keyid = params.keyid
+			if (keySplit.length > 1) {
+				const [_scheme, parsedKeyid] = params.keyid.split(':')
+				keyid = parsedKeyid
+			}
+
+			return {
+				id: params.keyid,
+				algs: ['hmac-sha256'],
+				verify: createVerifier(params.keyid, 'hmac-sha256')
+			}
+		}
+		if (params.alg == "rsa-pss-sha512") {
+			const keySplit = params.keyid.split(':')
+			let keyid = params.keyid
+			if (keySplit.length > 1) {
+				const [_scheme, parsedKeyid] = params.keyid.split(':')
+				keyid = parsedKeyid
+			}
+			
+			const n = base64UrlToArrayBuffer(keyid);
+			const pem = await toPublicPem(n, 65537);
+			return {
+				id: keyid,
+				algs: ['rsa-pss-sha512'],
+				verify: createVerifier(pem, 'rsa-pss-sha512')
+			}
+		}
+
+		return null
+	}
+
+	if (r instanceof Response) {
+		return verifyMessage({
+			all: true,
+			keyLookup: keyLookup
+		}, r as HttpSigResponse);
+	}
+	else {
+		return verifyMessage({
+			all: true,
+			keyLookup: keyLookup
+		}, r as HttpSigRequest); 
+	}
+}
+
+function base64UrlToArrayBuffer(base64url: string): ArrayBuffer {
+  // Fix padding and replace URL-safe chars
+  const base64 = base64url
+    .replace(/-/g, "+")
+    .replace(/_/g, "/")
+    .padEnd(Math.ceil(base64url.length / 4) * 4, "=");
+
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+async function toPublicPem(nBuf: ArrayBuffer, eInt = 65537) {
+	// Encode nBuf -> base64url
+	const nB64Url = btoa(String.fromCharCode(...new Uint8Array(nBuf)))
+		.replace(/\+/g, "-")
+		.replace(/\//g, "_")
+		.replace(/=+$/, "");
+
+	// Encode eInt (e.g. 65537) -> base64url
+	let eBytes = [];
+		let tmp = eInt;
+		while (tmp > 0) {
+		eBytes.unshift(tmp & 0xff);
+		tmp >>= 8;
+	}
+	const eB64Url = btoa(String.fromCharCode(...eBytes))
+		.replace(/\+/g, "-")
+		.replace(/\//g, "_")
+		.replace(/=+$/, "");
+
+	// Import JWK and export PEM
+	const key = await crypto.subtle.importKey(
+		"jwk",
+		{
+			kty: "RSA",
+			n: nB64Url,
+			e: eB64Url,
+			alg: "RS256",
+			ext: true,
+		},
+		{ name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+		true,
+		["verify"]
+	);
+
+	const spki = await crypto.subtle.exportKey("spki", key);
+
+	// Convert ArrayBuffer -> PEM strings
+	const b64 = arrayBufferToBase64(spki);
+	const pem = `-----BEGIN PUBLIC KEY-----\n${b64.match(/.{1,64}/g)?.join("\n")}\n-----END PUBLIC KEY-----`;
+	return pem
+}
+
+function arrayBufferToBase64(arrayBuffer: ArrayBuffer) {
+	let binary = "";
+	const bytes = new Uint8Array(arrayBuffer);
+	const chunkSize = 0x8000; // avoid stack overflow on large keys
+	for (let i = 0; i < bytes.length; i += chunkSize) {
+		binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+	}
+	return btoa(binary);
 }

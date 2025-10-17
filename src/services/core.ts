@@ -1,8 +1,9 @@
 import { toANS104Request, toDataItemSigner } from '../helpers/data-item.ts';
 import { ErrorCode, RequestError, ValidationError } from '../helpers/errors.ts';
-import { toHBRequest, toHttpSigner, toSigBaseArgs } from '../helpers/http-sig.ts';
+import { toHBRequest, toHttpSigner, toSigBaseArgs, verifySig } from '../helpers/http-sig.ts';
 import { DependenciesType, HttpRequest, RequestType, SigningFormatType } from '../helpers/types.ts';
 import { debugLog, joinURL } from '../helpers/utils.ts';
+import { Response as HttpSigResponse, Request as HttpSigRequest } from 'http-message-signatures/lib/types/index.js';
 
 export function request(deps: DependenciesType) {
 	return async (args: RequestType): Promise<Response> => {
@@ -56,6 +57,9 @@ export function request(deps: DependenciesType) {
 						});
 
 						const signedRequest = await toHttpSigner(deps.signer)(signingArgs);
+						if (!verifySig(signedRequest as HttpSigRequest)) {
+							throw new Error('Invalid httpsig request')
+						}
 						httpRequest = { ...signedRequest };
 					} else {
 						httpRequest = {
@@ -89,6 +93,27 @@ export function request(deps: DependenciesType) {
 
 			const response = await fetch(requestURL, httpRequestArgs);
 
+			// Checks whether the response is valid httpsig
+			const isHttpSigResponse = response.headers.get('signature') && response.headers.get('signature-input')
+			if (isHttpSigResponse) {
+				const res = {
+					headers: headersToRecords(response.headers),
+					status: response.status
+				} as HttpSigResponse
+				try {
+					const validSig = await verifySig(res)
+					if (!validSig) {
+						throw new Error('Invalid httpsig response')
+					}
+				}
+				catch(e) {
+					console.log('Invalid httpsig response')
+					console.log('req', httpRequestArgs)
+					console.log('res', response)
+					throw e
+				}
+			}
+
 			const bodyText = await response
 				.clone()
 				.text()
@@ -112,6 +137,19 @@ export function request(deps: DependenciesType) {
 			);
 		}
 	};
+}
+
+function headersToRecords(headers: Headers) {
+	return Array.from(headers.entries()).reduce((acc, [key, value]) => {
+		if (acc[key]) {
+		acc[key] = Array.isArray(acc[key])
+			? [...acc[key], value]
+			: [acc[key] as string, value];
+		} else {
+			acc[key] = value;
+		}
+		return acc;
+	}, {} as Record<string, string | string[]>);
 }
 
 export function validateRequest(args: RequestType): void {
