@@ -5,7 +5,6 @@ import { validateHashInput, validateSignatureData } from './security.ts';
 import { CreateInput, DataItemFields, SignerType, SigningFormatType } from './types.ts';
 import { debugLog, encodeBase64Url, sha256, toView, toViewBuffer } from './utils.ts';
 
-// Import base64url for ao/connect compatibility
 let base64url: any;
 try {
 	// @ts-ignore
@@ -124,7 +123,7 @@ export function toDataItemSigner(signer: SignerType) {
 		}
 		const rawSig = toViewBuffer(res.signature);
 
-		// Splice the raw signature into the unsigned bytes (match ao/connect exactly)
+		// Splice the raw signature into the unsigned bytes
 		const signedBytes = unsignedBytes!;
 		signedBytes.set(rawSig, 2);
 
@@ -147,6 +146,8 @@ export function toDataItemSigner(signer: SignerType) {
 		const hashResult = await crypto.subtle.digest('SHA-256', rawSig as any);
 		const id = base64url && base64url.encode ? base64url.encode(Buffer.from(hashResult)) : encodeBase64Url(hashResult);
 
+		debugLog('info', 'Data Item ID:', id);
+
 		return { id, raw: signedBytes };
 	};
 }
@@ -164,7 +165,6 @@ export function toANS104Request(fields: DataItemFields): { headers: Record<strin
 
 	const exclude = new Set(excludeList);
 
-	// Combine filter and map operations into single loop for better performance
 	const dynamicTags: Array<{ name: string; value: string }> = [];
 	for (const [name, value] of Object.entries(rest)) {
 		if (!exclude.has(name.toLowerCase())) {
