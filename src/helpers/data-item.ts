@@ -47,10 +47,13 @@ export async function getRawAndId(dataItemBytes: Uint8Array) {
 	 */
 	const rawSignature = dataItem.rawSignature;
 	validateHashInput(rawSignature, 'signature for ID calculation');
-	const rawId = await sha256(rawSignature.buffer as any);
+
+	const sigBytes = rawSignature instanceof Uint8Array ? rawSignature : new Uint8Array(rawSignature);
+
+	const rawId = await crypto.subtle.digest('SHA-256', sigBytes as any);
 
 	return {
-		id: encodeBase64Url(rawId),
+		id: base64url.encode(new Uint8Array(rawId)),
 		raw: dataItem.getRaw(),
 	};
 }
