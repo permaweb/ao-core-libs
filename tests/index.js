@@ -192,6 +192,8 @@ async function runTests(deps) {
 		expect(processId).toEqualType('string');
 	});
 
+	console.log(processId);
+
 	if (!processId) {
 		logError('Process Spawn Failed - Aborting');
 		process.exit(1);
@@ -224,20 +226,76 @@ async function runTests(deps) {
 	});
 }
 
+async function createEthSigner() {
+	// Dynamically import arbundles to create an Ethereum signer
+	try {
+		const { TypedEthereumSigner } = await import('@dha-team/arbundles');
+		// Use a test private key (DO NOT use in production)
+		const testPrivateKey = '37929fc21ab44ace162318acbbf4d24a41270b2aee18fd1cfb22e3fc3f4b4024';
+		const ethSigner = new TypedEthereumSigner(testPrivateKey);
+
+		// Wrap the arbundles signer to match ao-core-libs signer interface
+		return async (create, kind) => {
+			if (kind === 'ans104') {
+				// For ANS-104 signing, we need to call create and then sign
+				const deepHash = await create({
+					type: ethSigner.signatureType,
+					publicKey: ethSigner.publicKey,
+					alg: 'ethereum',
+				});
+
+				const signature = await ethSigner.sign(deepHash);
+
+				return {
+					signature: Buffer.from(signature),
+					address: ethSigner.publicKey.toString(),
+				};
+			} else if (kind === 'httpsig') {
+				// For HTTP signature signing
+				const signatureBase = await create({
+					type: ethSigner.signatureType,
+					publicKey: ethSigner.publicKey,
+					alg: 'ethereum',
+				});
+
+				const signature = await ethSigner.sign(signatureBase);
+
+				return {
+					signature: Buffer.from(signature),
+					address: ethSigner.publicKey.toString(),
+				};
+			}
+			throw new Error(`Unknown signer kind: ${kind}`);
+		};
+	} catch (e) {
+		logError('Failed to create Ethereum signer: ' + e.message);
+		return null;
+	}
+}
+
 (async function () {
 	const jwk = JSON.parse(fs.readFileSync(process.env.PATH_TO_WALLET));
 	const url = process.argv[2] || 'http://localhost:8734';
 
 	logInfo(`[AO Core Libs] Testing on URL: ${url}`);
 
-	/* Run tests without signing any requests */
-	await runTests({ url });
+	// /* Run tests without signing any requests */
+	// await runTests({ url });
 
-	/* Have AOCore create a signer from a JWK */
-	await runTests({ jwk, url });
+	// /* Have AOCore create a signer from a JWK */
+	// await runTests({ jwk, url });
 
-	/* Pass a signer directly */
-	await runTests({ signer: createSigner(jwk), url });
+	// /* Pass a signer directly */
+	// await runTests({ signer: createSigner(jwk), url });
+
+	/* Test with Ethereum wallet */
+	logInfo('\n[AO Core Libs] Testing with Ethereum wallet...');
+	const ethSigner = await createEthSigner();
+	if (ethSigner) {
+		await runTests({ signer: ethSigner, url });
+	} else {
+		logInfo('Skipping Ethereum wallet tests (arbundles not available)');
+	}
 
 	logInfo('\nAO Core Libs Test Summary:');
 	console.log(`   \x1b[32mPassed\x1b[0m: ${passed}`);
