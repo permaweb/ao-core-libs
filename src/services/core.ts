@@ -67,10 +67,22 @@ export function request(deps: DependenciesType) {
 					break;
 			}
 		} catch (e: unknown) {
+			// Log the actual error for debugging
+			debugLog('error', 'Request formatting error:', e);
+			if (e instanceof Error) {
+				debugLog('error', 'Error message:', e.message);
+				debugLog('error', 'Error stack:', e.stack);
+			}
+
 			throw new RequestError(
 				ErrorCode.REQUEST_FORMATTING_FAILED,
-				'Failed to format request for signing',
-				{ signingFormat, path: args.path },
+				`Failed to format request for signing${e instanceof Error ? `: ${e.message}` : ''}`,
+				{
+					signingFormat,
+					path: args.path,
+					errorMessage: e instanceof Error ? e.message : String(e),
+					errorStack: e instanceof Error ? e.stack : undefined,
+				},
 				e instanceof Error ? e : undefined,
 			);
 		}

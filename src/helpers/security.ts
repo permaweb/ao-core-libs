@@ -233,6 +233,7 @@ class CryptoRateLimiter {
 
 		// Periodic cleanup to prevent memory leaks
 		this.cleanupInterval = setInterval(() => this.cleanup(), this.windowMs);
+		this.cleanupInterval.unref?.();
 	}
 
 	private cleanup(): void {

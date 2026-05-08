@@ -110,30 +110,6 @@ export function decodeBase64UrlToBytes(b64url: string): Uint8Array {
 	return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 }
 
-/**
- * Convert a base64url‐encoded *string* or a Uint8Array/ArrayBufferView
- * into a Uint8Array of raw bytes.
- */
-// export function toView(value: string | ArrayBufferView | Buffer): Uint8Array {
-// 	if (Buffer.isBuffer(value)) {
-// 		return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-// 	}
-
-// 	if (ArrayBuffer.isView(value)) {
-// 		return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-// 	}
-
-// 	if (typeof value === 'string') {
-// 		return decodeBase64UrlToBytes(value);
-// 	}
-
-// 	throw new EncodingError(ErrorCode.ENCODING_UNSUPPORTED_INPUT_TYPE, 'Unsupported input type for toView conversion', {
-// 		provided: typeof value,
-// 		supportedTypes: ['string', 'Buffer', 'Uint8Array', 'ArrayBufferView'],
-// 		suggestion: 'Convert input to string (base64url) or byte array format',
-// 	});
-// }
-
 export const toView = (value: any) => {
 	if (ArrayBuffer.isView(value)) value = Buffer.from(value.buffer, value.byteOffset, value.byteLength);
 	else if (typeof value === 'string') value = base64url.toBuffer(value);
@@ -144,18 +120,41 @@ export const toView = (value: any) => {
 /**
  * Convert value to Buffer (ao/connect compatible version)
  * This matches the exact behavior of ao/connect's toView function
+ * Extended to support Ethereum hex addresses for ETH wallet compatibility
  */
 export function toViewBuffer(value: string | ArrayBufferView | Buffer): Buffer {
 	if (ArrayBuffer.isView(value)) {
 		return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
 	}
 	if (typeof value === 'string') {
-		if (base64url && base64url.toBuffer) {
-			return base64url.toBuffer(value);
+		// Check if it's a hex string (Ethereum address format)
+		// Hex strings can start with '0x' or be plain hex characters
+		const isHex = /^(0x)?[0-9a-fA-F]+$/.test(value);
+
+		if (isHex) {
+			// Remove '0x' prefix if present and convert from hex
+			const hexString = value.startsWith('0x') ? value.slice(2) : value;
+			return Buffer.from(hexString, 'hex');
 		}
-		// Fallback to manual conversion
-		const bytes = decodeBase64UrlToBytes(value);
-		return Buffer.from(bytes);
+
+		// Try base64url decoding for Arweave keys
+		if (base64url && base64url.toBuffer) {
+			try {
+				return base64url.toBuffer(value);
+			} catch (e) {
+				// If base64url fails, fall through to manual conversion
+			}
+		}
+
+		// Fallback to manual base64url conversion
+		try {
+			const bytes = decodeBase64UrlToBytes(value);
+			return Buffer.from(bytes);
+		} catch (e) {
+			throw new Error(
+				`Failed to convert string to Buffer. Value must be hex-encoded (e.g., "0x1234..."), base64url-encoded, or a valid ArrayBufferView. Received: ${value.substring(0, 20)}...`,
+			);
+		}
 	}
 	throw new Error('Unexpected type. Value must be one of Uint8Array, ArrayBuffer, or base64url-encoded string');
 }

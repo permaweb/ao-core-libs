@@ -177,7 +177,7 @@ async function runTests(deps) {
 			'push-device': 'push@1.0',
 			'execution-device': 'genesis-wasm@1.0',
 			Authority: scheduler,
-			Module: 'URgYpPQzvxxfYQtjrIQ116bl3YBfcImo3JEnNo8Hlrk',
+			Module: 'ISShJH1ij-hPPt9St5UFFr_8Ys3Kj5cyg7zrMGt7H9s',
 			Type: 'Process',
 			'Data-Protocol': 'ao',
 			Variant: 'ao.N.1',
@@ -197,7 +197,28 @@ async function runTests(deps) {
 		process.exit(1);
 	}
 
-	await runTest(logTest(prefix, 'ANS-104 POST'), async () => {
+	await runTest(logTest(prefix, 'ANS-104 POST [Message]'), async () => {
+		const res = await aoCore.request({
+			method: 'POST',
+			'signing-format': 'ans104',
+			path: `/${processId}~process@1.0/push`,
+			target: processId,
+			'accept-bundle': 'true',
+			'accept-codec': 'httpsig@1.0',
+			Type: 'Message',
+			'Data-Protocol': 'ao',
+			Variant: 'ao.N.1',
+			data: '1984',
+		});
+
+		processId = res.headers.get('process');
+
+		expect(res).toBeDefined();
+		expect(res.status).toEqual(200);
+		expect(processId).toEqualType('string');
+	});
+
+	await runTest(logTest(prefix, 'ANS-104 POST [At Slot]'), async () => {
 		const res = await aoCore.request({
 			method: 'POST',
 			['signing-format']: 'ans104',
@@ -210,7 +231,7 @@ async function runTests(deps) {
 		expect(isValidSlot).toEqual(true);
 	});
 
-	await runTest(logTest(prefix, 'HTTP-SIG POST'), async () => {
+	await runTest(logTest(prefix, 'HTTP-SIG POST [At Slot]'), async () => {
 		const res = await aoCore.request({
 			method: 'POST',
 			['signing-format']: 'httpsig',
@@ -222,6 +243,54 @@ async function runTests(deps) {
 		const isValidSlot = Number.isFinite(Number(slot));
 		expect(isValidSlot).toEqual(true);
 	});
+}
+
+async function createEthSigner() {
+	try {
+		const { EthereumSigner } = await import('@dha-team/arbundles');
+		// Use a test private key (DO NOT use in production)
+		const testPrivateKey = '37929fc21ab44ace162318acbbf4d24a41270b2aee18fd1cfb22e3fc3f4b4024';
+		const ethSigner = new EthereumSigner(testPrivateKey);
+		const publicKey = Buffer.from(ethSigner.publicKey);
+		const signerAddress = publicKey.toString('base64url');
+
+		// Wrap the arbundles signer to match ao-core-libs signer interface
+		return async (create, kind) => {
+			if (kind === 'ans104') {
+				// For ANS-104 signing, we need to call create and then sign
+				const deepHash = await create({
+					type: ethSigner.signatureType,
+					publicKey,
+					alg: 'ethereum',
+				});
+
+				const signature = await ethSigner.sign(deepHash);
+
+				return {
+					signature: Buffer.from(signature),
+					address: signerAddress,
+				};
+			} else if (kind === 'httpsig') {
+				// For HTTP signature signing
+				const signatureBase = await create({
+					type: ethSigner.signatureType,
+					publicKey,
+					alg: 'ethereum',
+				});
+
+				const signature = await ethSigner.sign(signatureBase);
+
+				return {
+					signature: Buffer.from(signature),
+					address: signerAddress,
+				};
+			}
+			throw new Error(`Unknown signer kind: ${kind}`);
+		};
+	} catch (e) {
+		logError('Failed to create Ethereum signer: ' + e.message);
+		return null;
+	}
 }
 
 (async function () {
@@ -238,6 +307,15 @@ async function runTests(deps) {
 
 	/* Pass a signer directly */
 	await runTests({ signer: createSigner(jwk), url });
+
+	/* Test with Ethereum wallet */
+	logInfo('\n[AO Core Libs] Testing with Ethereum wallet...');
+	const ethSigner = await createEthSigner();
+	if (ethSigner) {
+		await runTests({ signer: ethSigner, url });
+	} else {
+		logInfo('Skipping Ethereum wallet tests (arbundles not available)');
+	}
 
 	logInfo('\nAO Core Libs Test Summary:');
 	console.log(`   \x1b[32mPassed\x1b[0m: ${passed}`);
