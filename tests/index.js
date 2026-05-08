@@ -177,7 +177,7 @@ async function runTests(deps) {
 			'push-device': 'push@1.0',
 			'execution-device': 'genesis-wasm@1.0',
 			Authority: scheduler,
-			Module: 'URgYpPQzvxxfYQtjrIQ116bl3YBfcImo3JEnNo8Hlrk',
+			Module: 'ISShJH1ij-hPPt9St5UFFr_8Ys3Kj5cyg7zrMGt7H9s',
 			Type: 'Process',
 			'Data-Protocol': 'ao',
 			Variant: 'ao.N.1',
@@ -192,14 +192,33 @@ async function runTests(deps) {
 		expect(processId).toEqualType('string');
 	});
 
-	console.log(processId);
-
 	if (!processId) {
 		logError('Process Spawn Failed - Aborting');
 		process.exit(1);
 	}
 
-	await runTest(logTest(prefix, 'ANS-104 POST'), async () => {
+	await runTest(logTest(prefix, 'ANS-104 POST [Message]'), async () => {
+		const res = await aoCore.request({
+			method: 'POST',
+			'signing-format': 'ans104',
+			path: `/${processId}~process@1.0/push`,
+			target: processId,
+			'accept-bundle': 'true',
+			'accept-codec': 'httpsig@1.0',
+			Type: 'Message',
+			'Data-Protocol': 'ao',
+			Variant: 'ao.N.1',
+			data: '1984',
+		});
+
+		processId = res.headers.get('process');
+
+		expect(res).toBeDefined();
+		expect(res.status).toEqual(200);
+		expect(processId).toEqualType('string');
+	});
+
+	await runTest(logTest(prefix, 'ANS-104 POST [At Slot]'), async () => {
 		const res = await aoCore.request({
 			method: 'POST',
 			['signing-format']: 'ans104',
@@ -212,7 +231,7 @@ async function runTests(deps) {
 		expect(isValidSlot).toEqual(true);
 	});
 
-	await runTest(logTest(prefix, 'HTTP-SIG POST'), async () => {
+	await runTest(logTest(prefix, 'HTTP-SIG POST [At Slot]'), async () => {
 		const res = await aoCore.request({
 			method: 'POST',
 			['signing-format']: 'httpsig',
@@ -227,12 +246,13 @@ async function runTests(deps) {
 }
 
 async function createEthSigner() {
-	// Dynamically import arbundles to create an Ethereum signer
 	try {
-		const { TypedEthereumSigner } = await import('@dha-team/arbundles');
+		const { EthereumSigner } = await import('@dha-team/arbundles');
 		// Use a test private key (DO NOT use in production)
 		const testPrivateKey = '37929fc21ab44ace162318acbbf4d24a41270b2aee18fd1cfb22e3fc3f4b4024';
-		const ethSigner = new TypedEthereumSigner(testPrivateKey);
+		const ethSigner = new EthereumSigner(testPrivateKey);
+		const publicKey = Buffer.from(ethSigner.publicKey);
+		const signerAddress = publicKey.toString('base64url');
 
 		// Wrap the arbundles signer to match ao-core-libs signer interface
 		return async (create, kind) => {
@@ -240,7 +260,7 @@ async function createEthSigner() {
 				// For ANS-104 signing, we need to call create and then sign
 				const deepHash = await create({
 					type: ethSigner.signatureType,
-					publicKey: ethSigner.publicKey,
+					publicKey,
 					alg: 'ethereum',
 				});
 
@@ -248,13 +268,13 @@ async function createEthSigner() {
 
 				return {
 					signature: Buffer.from(signature),
-					address: ethSigner.publicKey.toString(),
+					address: signerAddress,
 				};
 			} else if (kind === 'httpsig') {
 				// For HTTP signature signing
 				const signatureBase = await create({
 					type: ethSigner.signatureType,
-					publicKey: ethSigner.publicKey,
+					publicKey,
 					alg: 'ethereum',
 				});
 
@@ -262,7 +282,7 @@ async function createEthSigner() {
 
 				return {
 					signature: Buffer.from(signature),
-					address: ethSigner.publicKey.toString(),
+					address: signerAddress,
 				};
 			}
 			throw new Error(`Unknown signer kind: ${kind}`);
@@ -279,14 +299,14 @@ async function createEthSigner() {
 
 	logInfo(`[AO Core Libs] Testing on URL: ${url}`);
 
-	// /* Run tests without signing any requests */
-	// await runTests({ url });
+	/* Run tests without signing any requests */
+	await runTests({ url });
 
-	// /* Have AOCore create a signer from a JWK */
-	// await runTests({ jwk, url });
+	/* Have AOCore create a signer from a JWK */
+	await runTests({ jwk, url });
 
-	// /* Pass a signer directly */
-	// await runTests({ signer: createSigner(jwk), url });
+	/* Pass a signer directly */
+	await runTests({ signer: createSigner(jwk), url });
 
 	/* Test with Ethereum wallet */
 	logInfo('\n[AO Core Libs] Testing with Ethereum wallet...');
