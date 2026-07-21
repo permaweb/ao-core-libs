@@ -40,7 +40,10 @@
 	"scripts": {
 		"clean:install": "rm -rf node_modules package-lock.json || true && npm cache clean --force && npm install",
 		"format": "eslint --fix . && npx prettier --write .",
-		"build": "node build.js"
+		"build": "node build.js",
+		"test:unit": "node --test tests/*.unit.js",
+		"test:integration": "npm run test:unit && cd tests && npm test && cd ..",
+		"tests": "npm run test:unit && npm run test:integration"
 	},
 	"dependencies": {
 		"@dha-team/arbundles": "^1.0.3",

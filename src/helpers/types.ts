@@ -167,6 +167,7 @@ export interface ANS104RequestResult {
 	headers: {
 		'Content-Type': string;
 		'codec-device': string;
+		[key: string]: string;
 	};
 	item: {
 		target: string;

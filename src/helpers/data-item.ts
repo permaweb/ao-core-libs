@@ -11,6 +11,28 @@ try {
 	base64url = require('base64url');
 } catch {}
 
+const OUTBOUND_ONLY_FIELDS = new Set(['signing-format', 'signingformat', 'accept-bundle', 'accept']);
+
+function outboundHeaderName(name: string): string | undefined {
+	const normalized = name.toLowerCase();
+	if (normalized === 'signingformat') return 'signing-format';
+	if (OUTBOUND_ONLY_FIELDS.has(normalized) || normalized.includes('codec')) return normalized;
+	return undefined;
+}
+
+function canonicalTag(
+	fields: DataItemFields,
+	lowercaseName: string,
+	canonicalName: string,
+	defaultValue: string,
+): { name: string; value: string } {
+	if (Object.prototype.hasOwnProperty.call(fields, lowercaseName)) {
+		return { name: lowercaseName, value: String(fields[lowercaseName] ?? defaultValue) };
+	}
+
+	return { name: canonicalName, value: String(fields[canonicalName] ?? defaultValue) };
+}
+
 export function createDataItemBytes(data: any, signer: any, opts: any) {
 	const signerMeta = (SIG_CONFIG as any)[signer.type];
 	if (!signerMeta) {
@@ -162,7 +184,7 @@ export function toANS104Request(fields: DataItemFields): { headers: Record<strin
 		});
 	}
 
-	const { target, anchor, data, Type, Variant, ...rest } = fields;
+	const { target, anchor, data, ...rest } = fields;
 
 	const excludeList = ['target', 'anchor', 'data', 'data-protocol', 'variant', 'dryrun', 'type', 'path', 'method'];
 
@@ -170,7 +192,7 @@ export function toANS104Request(fields: DataItemFields): { headers: Record<strin
 
 	const dynamicTags: Array<{ name: string; value: string }> = [];
 	for (const [name, value] of Object.entries(rest)) {
-		if (!exclude.has(name.toLowerCase())) {
+		if (!exclude.has(name.toLowerCase()) && !outboundHeaderName(name)) {
 			dynamicTags.push({
 				name,
 				value: String(value),
@@ -180,9 +202,9 @@ export function toANS104Request(fields: DataItemFields): { headers: Record<strin
 
 	const tags = [
 		...dynamicTags,
-		{ name: 'Data-Protocol', value: 'ao' },
-		{ name: 'Type', value: Type ?? 'Message' },
-		{ name: 'Variant', value: Variant ?? 'ao.N.1' },
+		canonicalTag(fields, 'data-protocol', 'Data-Protocol', 'ao'),
+		canonicalTag(fields, 'type', 'Type', 'Message'),
+		canonicalTag(fields, 'variant', 'Variant', 'ao.N.1'),
 	];
 
 	const dataItem = {
@@ -194,11 +216,18 @@ export function toANS104Request(fields: DataItemFields): { headers: Record<strin
 
 	debugLog('info', 'ANS-104 Data Item:', JSON.stringify(dataItem, null, 2));
 
+	const headers: Record<string, string> = {
+		'Content-Type': 'application/ans104',
+		'codec-device': 'ans104@1.0',
+	};
+
+	for (const [name, value] of Object.entries(fields)) {
+		const headerName = outboundHeaderName(name);
+		if (headerName && value != null) headers[headerName] = String(value);
+	}
+
 	return {
-		headers: {
-			'Content-Type': 'application/ans104',
-			'codec-device': 'ans104@1.0',
-		},
+		headers,
 		item: dataItem,
 	};
 }
