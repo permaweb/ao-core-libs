@@ -45,7 +45,7 @@ const aoCore = AOCore.init({ signer: createSigner(window.arweaveWallet) });
 
 ## Usage
 
-This SDK exposes a single function, `request`, for communicating with AO Core, which accepts these arguments:
+This SDK exposes `request` for communicating with AO Core, plus focused clients for preloaded devices such as `rng`.
 
 - `path` – The endpoint path (no leading slash)
 - `method` – (optional - defaults to `GET`) HTTP Request Method (`GET` or `POST`)
@@ -61,6 +61,27 @@ const response = await aoCore.request({
 	'signing-format': 'httpsig',
 	'my-custom-field': '1234',
 });
+```
+
+### Verifiable randomness
+
+`rng.verifyRound` verifies a BLS12-381 randomness-beacon signature through HyperBEAM's preloaded `~rng@1.0` device. It constructs the versioned HyperBEAM RNG signing message from the beacon id and round so callers cannot accidentally omit domain separation. `rng.derive` expands seed material into deterministic bytes. RNG Labs, a CipherPlay Inc. product, maintains the protocol and reference network; this adapter is distributed under this repository's license. Both methods return the standard `Response`, encoded as JSON.
+
+```typescript
+const verified = await aoCore.rng.verifyRound({
+	publicKey: GROUP_PUBLIC_KEY_HEX,
+	beacon: BEACON_PROCESS_ID,
+	round,
+	signature: GROUP_SIGNATURE_HEX,
+});
+const verification = await verified.json();
+
+const derived = await aoCore.rng.derive({
+	seed: verification.value,
+	counter: 0,
+	bytes: 32,
+});
+const randomBytes = await derived.json();
 ```
 
 ## Testing
