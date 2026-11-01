@@ -82,7 +82,15 @@ const derived = await aoCore.rng.derive({
 	bytes: 32,
 });
 const randomBytes = await derived.json();
+
+const group = await aoCore.rng.generator().then((response) => response.json());
+const reveal = await aoCore.rng.verifyReveal({ c, alpha, h: BEACON_H });
+const crack = await aoCore.rng.verifyCrack({ x: c, t, y, proof });
 ```
+
+`generator`, `verifyReveal`, and `verifyCrack` expose the Any-Honest time-lock
+checks under the same `~rng@1.0` namespace. They verify published material;
+clients do not need the validator's secret or a trusted verifier.
 
 ## Testing
 

@@ -40,7 +40,7 @@ export function validateDependencies(deps: DependenciesType): void {
 }
 
 // @ts-ignore -- Aliased in build, dependent on platform
+export type { DeriveRandomArgs, VerifyCrackArgs, VerifyRevealArgs, VerifyRoundArgs } from './services/rng.ts';
 export { createSigner } from 'signers';
-export type { DeriveRandomArgs, VerifyRoundArgs } from './services/rng.ts';
 
 export default { init };
