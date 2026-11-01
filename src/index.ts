@@ -2,6 +2,7 @@ import { ErrorCode, ValidationError } from './helpers/errors.ts';
 import { validateJWK } from './helpers/security.ts';
 import { DependenciesType } from './helpers/types.ts';
 import { request } from './services/core.ts';
+import { rng } from './services/rng.ts';
 import { createSigner } from './signers/common.ts';
 
 const DEFAULT_URL = 'https://forward.computer';
@@ -15,7 +16,8 @@ function init(deps: DependenciesType = {}) {
 		signer: deps.signer ?? (deps.jwk ? createSigner(deps.jwk) : undefined),
 	};
 
-	return { request: request(resolvedDeps) };
+	const requestClient = request(resolvedDeps);
+	return { request: requestClient, rng: rng(requestClient) };
 }
 
 export function validateDependencies(deps: DependenciesType): void {
@@ -38,6 +40,7 @@ export function validateDependencies(deps: DependenciesType): void {
 }
 
 // @ts-ignore -- Aliased in build, dependent on platform
+export type { DeriveRandomArgs, VerifyCrackArgs, VerifyRevealArgs, VerifyRoundArgs } from './services/rng.ts';
 export { createSigner } from 'signers';
 
 export default { init };
